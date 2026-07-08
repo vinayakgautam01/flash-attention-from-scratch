@@ -1,0 +1,32 @@
+# Build outputs
+build/
+build_*/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+*.so
+*.o
+*.obj
+
+# CMake in-source artifacts (safety net; we build out-of-source)
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+
+# Test / lint caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Local envs
+.venv/
+venv/
