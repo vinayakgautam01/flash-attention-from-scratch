@@ -90,19 +90,21 @@ Each milestone has the same shape:
 
 **TODOs.**
 
-- [ ] Decide target GPU arch(s) (e.g. `sm_80`, `sm_86`, `sm_89`) and record in `docs/AGENTS.md`.
-- [ ] Create the layout from the plan doc:
+- [x] Decide target GPU arch(s) (e.g. `sm_80`, `sm_86`, `sm_89`) and record in `docs/AGENTS.md`.
+- [x] Create the layout from the plan doc:
   ```text
   csrc/  tests/  benchmarks/  scripts/  docs/  docs/plots/  benchmarks/results/
   ```
-- [ ] `CMakeLists.txt` (or Makefile) that builds a hello-world `.cu` and links against Torch (guarded).
-- [ ] `scripts/build.sh`, `scripts/test.sh`, `scripts/bench.sh`, `scripts/profile_ncu.sh` (stubs OK).
-- [ ] `.gitignore`, `.clang-format`, `.editorconfig`, `pyproject.toml` (or `requirements.txt`) pinning `torch`, `numpy`, `pytest`, `matplotlib`.
-- [ ] Minimal GitHub Actions workflow: build + lint on push (CPU-only runner is fine).
-- [ ] `docs/AGENTS.md` with: target arch, build instructions, test/bench commands, kernel-naming convention, tensor-layout convention (row-major, `[B, H, N, D]`), commit conventions, "how to add a new variant."
-- [ ] Empty `README.md` with variant-table skeleton (fill later).
-- [ ] Empty `WRITEUP.md` at repo root with the section skeleton pre-filled and a `<!-- hero-result -->` placeholder for the headline number (`{speedup}× faster, {ratio}× less HBM traffic vs naive at (B, H, N, D) = (…)`, filled in M10).
-- [ ] `scripts/reproduce.sh` — a single script a stranger with a GPU can run to build, test, and produce the hero plot. If GPU CI is available (self-hosted runner), wire it up; if not, `docs/AGENTS.md` documents the exact `reproduce.sh` invocation as the substitute.
+- [x] `CMakeLists.txt` (or Makefile) that builds a hello-world `.cu` and links against Torch (guarded).
+- [x] `scripts/build.sh`, `scripts/test.sh`, `scripts/bench.sh`, `scripts/profile_ncu.sh` (stubs OK).
+- [x] `.gitignore`, `.clang-format`, `.editorconfig`, `pyproject.toml` (or `requirements.txt`) pinning `torch`, `numpy`, `pytest`, `matplotlib`.
+- [x] Minimal GitHub Actions workflow: build + lint on push (CPU-only runner is fine).
+- [x] `docs/AGENTS.md` with: target arch, build instructions, test/bench commands, kernel-naming convention, tensor-layout convention (row-major, `[B, H, N, D]`), commit conventions, "how to add a new variant."
+- [x] Empty `README.md` with variant-table skeleton (fill later).
+- [x] Empty `WRITEUP.md` at repo root with the section skeleton pre-filled and a `<!-- hero-result -->` placeholder for the headline number (`{speedup}× faster, {ratio}× less HBM traffic vs naive at (B, H, N, D) = (…)`, filled in M10).
+- [x] `scripts/reproduce.sh` — a single script a stranger with a GPU can run to build, test, and produce the hero plot. If GPU CI is available (self-hosted runner), wire it up; if not, `docs/AGENTS.md` documents the exact `reproduce.sh` invocation as the substitute.
+
+**Status.** Complete on `259712c` (2026-07-20). Colab T4 build + smoke test green; CI green on `main`; hero-result placeholder still open (fills in M10).
 
 **Verification plan.**
 
