@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "flash-attention-from-scratch"
 version = "0.0.0"
@@ -14,6 +18,11 @@ dev = [
     "pytest>=7.4",
     "ruff>=0.5",
 ]
+
+[tool.setuptools]
+# No Python module in the repo yet. The pybind11 shim lands in M4/M5;
+# update this to `packages = ["flash_attention"]` at that point.
+py-modules = []
 
 [tool.ruff]
 line-length = 100
