@@ -15,26 +15,47 @@ Full roadmap: [`MILESTONES.md`](MILESTONES.md). Original planning: [`flash-atten
 
 **Reference GPU for portfolio numbers: Modal A10G (`sm_86`).** All hero results, benchmark tables, and Nsight reports are collected on A10G unless otherwise noted.
 
-| Field | Value | Notes |
-|---|---|---|
-| Target arch (default) | `sm_86` | Matches Modal A10G. Override for Colab T4: `CMAKE_CUDA_ARCHITECTURES=75 scripts/build.sh`. |
-| Reference GPU | Modal A10G, `sm_86` | Datasheet: ~31 TFLOPS fp32, ~600 GB/s HBM. |
-| Dev GPU | Colab T4, `sm_75` | Datasheet: ~8.1 TFLOPS fp32, ~320 GB/s HBM. |
-| A10G peak fp32 (GFLOP/s) | _to be filled from datasheet_ | Needed for M9 roofline on the reference GPU. |
-| A10G peak HBM BW (GB/s) | _to be filled from datasheet_ | Needed for M9 roofline on the reference GPU. |
-| A10G shared mem / SM (KB) | _to be filled from `./build/hello`_ | Run on Modal once M5's Modal setup lands. |
-| T4 shared mem / SM (KB) | _to be filled from `./build/hello`_ | Paste after first Colab run. |
+**Default build arch:** `sm_86` (matches Modal A10G). Override for Colab T4: `CMAKE_CUDA_ARCHITECTURES=75 scripts/build.sh` (auto-detected by `scripts/bootstrap_colab.sh`).
 
-`./build/hello` prints most of these. Only the peak fp32 GFLOP/s requires a datasheet lookup.
+### 2.1 Colab T4 (dev GPU) — confirmed
+
+Verified via `./build/hello` on Colab T4 (build commit `fe4bfbf`, 2026-07-20).
+
+| Field | Value | Source |
+|---|---|---|
+| Compute capability | `sm_75` (Turing) | `nvidia-smi` |
+| SMs | 40 | `./build/hello` |
+| Global memory | 14.56 GB (of 16 GB shipped) | `./build/hello` |
+| Shared mem / SM | 64 KB | `./build/hello` |
+| Shared mem / CTA (default) | 48 KB | `./build/hello` — opt in to 64 KB via `cudaFuncSetAttribute(k, cudaFuncAttributeMaxDynamicSharedMemorySize, 65536)` |
+| Registers / SM | 65,536 | `./build/hello` |
+| HBM clock | 5,001 MHz | `./build/hello` |
+| HBM bus width | 256 bits | `./build/hello` |
+| Peak HBM BW | 320.1 GB/s | Computed: `2 × clock × bus / 8` |
+| Peak fp32 | ~8.1 TFLOPS | Datasheet — for T4-side roofline sanity check in M9. |
+
+### 2.2 Modal A10G (reference GPU) — pending
+
+Filled after the first Modal run in M5.
+
+| Field | Value | Source |
+|---|---|---|
+| Compute capability | `sm_86` (Ampere) | `nvidia-smi` |
+| Peak fp32 | ~31 TFLOPS | Datasheet — needed for M9 roofline. |
+| Peak HBM BW | ~600 GB/s | Datasheet — needed for M9 roofline. |
+| SMs | _pending_ | `./build/hello` |
+| Shared mem / SM | _pending_ | `./build/hello` |
+| Shared mem / CTA (default) | _pending_ | `./build/hello` |
+| Registers / SM | _pending_ | `./build/hello` |
 
 ## 3. Toolchain
 
 | Tool | Pin | How to check |
 |---|---|---|
-| CUDA toolkit | ≥ 12.0 (tested with 12.x) | `nvcc --version` |
+| CUDA toolkit | ≥ 12.0 · Colab tested: **12.8.93** · Modal: _pending_ | `nvcc --version` |
 | CMake | ≥ 3.24 | `cmake --version` |
-| Python | ≥ 3.10 | `python --version` |
-| PyTorch | ≥ 2.4 | `python -c "import torch; print(torch.__version__)"` |
+| Python | ≥ 3.10 · Colab tested: **3.12.13** | `python --version` |
+| PyTorch | ≥ 2.4 · Colab tested: **2.11.0+cu128** | `python -c "import torch; print(torch.__version__)"` |
 
 Install the Python side once:
 
@@ -154,10 +175,10 @@ Resolved during M0:
 
 - [x] **Target arch.** Default `sm_86` (Modal A10G is the reference GPU). Override to `75` for Colab T4 via env var.
 - [x] **GPU access.** Hybrid: Colab T4 free tier for dev, Modal A10G ($30 credits) for deliverable-quality runs, Mac local for CPU/docs.
+- [x] **Toolchain on Colab.** CUDA 12.8.93, Python 3.12.13, PyTorch 2.11.0+cu128. Modal side to be added when M5's Modal setup lands.
 
 Still open — confirm before the relevant milestone:
 
-- [ ] **CUDA toolkit version.** Currently unpinned. Paste `nvcc --version` output for both Colab and Modal into §3 after first run of each.
 - [ ] **Python binding style.** Plan: `pybind11` shim. Alternative: `torch.utils.cpp_extension` (JIT). Confirm before M4.
 - [ ] **Test framework for pure-C++/CUDA paths.** Plan: pytest via the pybind11 shim. Alternative: GoogleTest for host-side unit tests.
 
