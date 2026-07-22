@@ -136,16 +136,20 @@ Each milestone has the same shape:
 
 **TODOs.**
 
-- [ ] `csrc/attention_cpu_ref.hpp` — templated, header-only, `float`/`double`. Numerically stable softmax (subtract row max).
-- [ ] Python mirror in `tests/reference.py` using pure NumPy (double-precision).
-- [ ] `tests/test_reference_matches_torch.py` — assert CPU ref matches `torch.nn.functional.scaled_dot_product_attention` within a tight tolerance on small shapes (e.g. `N=16, D=8`).
-- [ ] Causal variant of the CPU reference (mask upper triangle before softmax).
-- [ ] Fixed-seed random tensor generator (`tests/util_tensors.py`) — reuse everywhere.
+- [x] `csrc/attention_cpu_ref.hpp` — templated, header-only, `float`/`double`. Numerically stable softmax (subtract row max).
+- [x] Python mirror in `tests/reference.py` using pure NumPy (double-precision).
+- [x] `tests/test_reference_matches_torch.py` — assert CPU ref matches `torch.nn.functional.scaled_dot_product_attention` within a tight tolerance on small shapes (e.g. `N=16, D=8`).
+- [x] Causal variant of the CPU reference (mask upper triangle before softmax).
+- [x] Fixed-seed random tensor generator (`tests/util_tensors.py`) — reuse everywhere.
+- [x] GoogleTest scaffolding for the C++ header (`tests/cpp/test_attention_cpu_ref.cpp`) — direct C++-side unit tests (AGENTS.md §8 decision).
+
+**Status.** Complete on `main` (2026-07-22). 19 pytest cases green (18 parametrized + 1 causal sanity), 7 GoogleTest cases green on Mac-local; C++ CI green pending Colab/Modal run.
 
 **Verification plan.**
 
 - `pytest tests/test_reference_matches_torch.py` green.
 - Max abs error CPU-ref vs PyTorch < `1e-5` (fp32) on `N ∈ {8, 16, 32}`, `D ∈ {8, 16, 32}`, causal ∈ {False, True}.
+- `ctest` in the build tree runs `test_attention_cpu_ref` and passes.
 
 **Understanding checkpoint.**
 
@@ -520,8 +524,8 @@ Each milestone has the same shape:
 
 | # | Milestone | Effort | Status |
 |---|---|---|---|
-| M0 | Repo scaffolding & source-of-truth setup | S | [ ] |
-| M1 | CPU reference + PyTorch oracle | S | [ ] |
+| M0 | Repo scaffolding & source-of-truth setup | S | [x] |
+| M1 | CPU reference + PyTorch oracle | S | [x] |
 | M2 | Naive CUDA multi-kernel baseline | M | [ ] |
 | M3 | Online softmax reference | M | [ ] |
 | M4 | FlashAttention v1 forward kernel | L | [ ] |

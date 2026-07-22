@@ -177,10 +177,10 @@ Resolved during M0:
 - [x] **GPU access.** Hybrid: Colab T4 free tier for dev, Modal A10G ($30 credits) for deliverable-quality runs, Mac local for CPU/docs.
 - [x] **Toolchain on Colab.** CUDA 12.8.93, Python 3.12.13, PyTorch 2.11.0+cu128. Modal side to be added when M5's Modal setup lands.
 
-Still open — confirm before the relevant milestone:
+Resolved during M1:
 
-- [ ] **Python binding style.** Plan: `pybind11` shim. Alternative: `torch.utils.cpp_extension` (JIT). Confirm before M4.
-- [ ] **Test framework for pure-C++/CUDA paths.** Plan: pytest via the pybind11 shim. Alternative: GoogleTest for host-side unit tests.
+- [x] **Python binding style.** `pybind11` shim (lands in M4). Industry standard; matches the official `flash-attn` repo; portable to non-torch consumers. Rejected: `torch.utils.cpp_extension` (simpler but torch-locked).
+- [x] **Test framework for pure-C++/CUDA paths.** GoogleTest for pure-C++ host code (starting with `attention_cpu_ref.hpp` in M1); pytest via pybind11 for CUDA kernels from M4. Matches CUTLASS/PyTorch practice — test each layer in its native framework, ~1 s C++ test round-trip.
 
 ## 9. Numerical tolerance policy
 
