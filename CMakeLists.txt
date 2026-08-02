@@ -64,6 +64,13 @@ if(HAVE_CUDA)
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
     )
+    # Force C++17 on both host and device compile lines. GoogleTest 1.15+ emits
+    # C++17-only attributes (e.g. [[maybe_unused]]) inside its parametrized-test
+    # macros, and CMAKE_CUDA_STANDARD alone doesn't always propagate through
+    # nvcc with CUDA_SEPARABLE_COMPILATION on some driver/toolkit combos.
+    # Declaring the requirement via target_compile_features makes CMake fail at
+    # configure time if the standard isn't available and guarantees -std=c++17.
+    target_compile_features(attention_naive PUBLIC cxx_std_17 cuda_std_17)
     target_compile_options(attention_naive PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>
     )
@@ -109,6 +116,9 @@ if(BUILD_TESTING)
         set_target_properties(test_attention_naive PROPERTIES
             CUDA_SEPARABLE_COMPILATION ON
         )
+        # See attention_naive block above for the rationale. GoogleTest's
+        # INSTANTIATE_TEST_SUITE_P macro requires C++17 in its expansion.
+        target_compile_features(test_attention_naive PRIVATE cxx_std_17 cuda_std_17)
         gtest_discover_tests(test_attention_naive)
     endif()
 endif()

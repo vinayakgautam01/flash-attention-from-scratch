@@ -62,7 +62,12 @@ class AttentionNaiveGrid
     : public ::testing::TestWithParam<std::tuple<int, int, bool>> {};
 
 TEST_P(AttentionNaiveGrid, MatchesCpuRefWithinTolerance) {
-    const auto [N, D, is_causal] = GetParam();
+    // Note: std::tie/std::get instead of C++17 structured bindings to keep
+    // this file portable across nvcc's C++14 host-compile fallback path.
+    const auto& p = GetParam();
+    const int  N         = std::get<0>(p);
+    const int  D         = std::get<1>(p);
+    const bool is_causal = std::get<2>(p);
     constexpr int B = 1;
     constexpr int H = 1;
     const std::size_t nelems = static_cast<std::size_t>(B) * H * N * D;
@@ -99,7 +104,9 @@ INSTANTIATE_TEST_SUITE_P(
         ::testing::Values(32, 64),               // D
         ::testing::Values(false, true)),         // causal
     [](const ::testing::TestParamInfo<AttentionNaiveGrid::ParamType>& info) {
-        const auto [N, D, is_causal] = info.param;
+        const int  N         = std::get<0>(info.param);
+        const int  D         = std::get<1>(info.param);
+        const bool is_causal = std::get<2>(info.param);
         std::string s = "N" + std::to_string(N) + "_D" + std::to_string(D)
                       + (is_causal ? "_causal" : "_noncausal");
         return s;
