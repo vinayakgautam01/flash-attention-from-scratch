@@ -52,6 +52,23 @@ endif()
 add_library(attention_cpu_ref INTERFACE)
 target_include_directories(attention_cpu_ref INTERFACE ${CMAKE_SOURCE_DIR}/csrc)
 
+# M2: naive multi-kernel attention baseline. Exposed as a static lib so both
+# the GoogleTest binary and (later, in M4/M5) the pybind11 shim can link it.
+# Declared after attention_cpu_ref so the target reference below resolves against
+# an already-defined target (avoids relying on generate-time forward resolution).
+if(HAVE_CUDA)
+    add_library(attention_naive STATIC csrc/attention_naive.cu)
+    target_include_directories(attention_naive PUBLIC ${CMAKE_SOURCE_DIR}/csrc)
+    target_link_libraries(attention_naive PUBLIC attention_cpu_ref)
+    set_target_properties(attention_naive PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+    )
+    target_compile_options(attention_naive PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>
+    )
+endif()
+
 # M1: GoogleTest for pure-C++ host-side unit tests. Decision recorded in
 # docs/AGENTS.md §8. On by default, controllable via BUILD_TESTING.
 option(BUILD_TESTING "Build C++ unit tests" ON)
@@ -77,6 +94,23 @@ if(BUILD_TESTING)
         GTest::gtest_main
     )
     gtest_discover_tests(test_attention_cpu_ref)
+
+    # M2: naive CUDA kernel correctness — diffed against the M1 CPU reference.
+    # Only built when CUDA is available (the kernel needs nvcc).
+    if(HAVE_CUDA)
+        add_executable(test_attention_naive
+            tests/cpp/test_attention_naive.cu
+        )
+        target_link_libraries(test_attention_naive PRIVATE
+            attention_naive
+            attention_cpu_ref
+            GTest::gtest_main
+        )
+        set_target_properties(test_attention_naive PROPERTIES
+            CUDA_SEPARABLE_COMPILATION ON
+        )
+        gtest_discover_tests(test_attention_naive)
+    endif()
 endif()
 
 if(HAVE_CUDA)
