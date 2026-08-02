@@ -14,6 +14,8 @@
 
 ---
 
+
+
 ## Success criteria
 
 **Must-have (portfolio-blocking).**
@@ -50,17 +52,21 @@
 
 ---
 
+
+
 ## Cross-cutting standards (project-wide, applies to every milestone)
 
-- **Commits.** Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `perf:`, `docs:`, `bench:`, `chore:`). **No `Co-authored-by:` trailers and no tool/agent attribution in commit messages** — authorship stays clean and human.
+- **Commits.** Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `perf:`, `docs:`, `bench:`, `chore:`). **No** `Co-authored-by:` **trailers and no tool/agent attribution in commit messages** — authorship stays clean and human.
 - **Source of truth.** `docs/AGENTS.md` is authoritative. If a decision isn't there, either add it or search the codebase before assuming.
 - **Search.** Use `ast-grep` over `grep` for code searches.
 - **Lint/Sonar.** Zero new issues; no `NOSONAR` without approval.
 - **Diffs.** Minimal and reversible; one milestone → one PR ideally, or a small stack.
 - **Reuse patterns.** Follow the same variant-table + benchmarks + Nsight structure as
-  your `gpu-parallel-patterns` repo. Don't invent new abstractions unless the domain forces it.
+your `gpu-parallel-patterns` repo. Don't invent new abstractions unless the domain forces it.
 - **Definition of Done per milestone.** All TODOs checked, verification plan executed and
-  screenshotted/logged into `docs/plots/` or `benchmarks/results/`, PR merged.
+screenshotted/logged into `docs/plots/` or `benchmarks/results/`, PR merged.
+
+
 
 ## Milestone template (used below)
 
@@ -71,11 +77,13 @@ Each milestone has the same shape:
 - **TODOs** — checkbox list, in dependency order.
 - **Verification plan** — measurable acceptance criteria; if it can't be measured, it doesn't count.
 - **Understanding checkpoint** — 2–3 questions you should be able to answer out loud
-  before ticking the milestone. These are what separate "I typed the kernel" from
-  "I understand the kernel."
+before ticking the milestone. These are what separate "I typed the kernel" from
+"I understand the kernel."
 - **Portfolio hook** — the one sentence a reviewer will take away from this milestone.
 
 ---
+
+
 
 ## M0 — Repo scaffolding & source-of-truth setup
 
@@ -123,6 +131,8 @@ Each milestone has the same shape:
 
 ---
 
+
+
 ## M1 — CPU reference + PyTorch oracle
 
 **Effort:** S · **Depends on:** M0
@@ -141,7 +151,7 @@ Each milestone has the same shape:
 - [x] `tests/test_reference_matches_torch.py` — assert CPU ref matches `torch.nn.functional.scaled_dot_product_attention` within a tight tolerance on small shapes (e.g. `N=16, D=8`).
 - [x] Causal variant of the CPU reference (mask upper triangle before softmax).
 - [x] Fixed-seed random tensor generator (`tests/util_tensors.py`) — reuse everywhere.
-- [x] GoogleTest scaffolding for the C++ header (`tests/cpp/test_attention_cpu_ref.cpp`) — direct C++-side unit tests (AGENTS.md §8 decision).
+- [x] GoogleTest scaffolding for the C++header (++`tests/cpp/test_attention_cpu_ref.cpp`++) — direct C++-side unit tests (AGENTS.md §8 decision).
 
 **Status.** Complete on `main` (2026-07-22). 19 pytest cases green (18 parametrized + 1 causal sanity), 7 GoogleTest cases green on Mac-local; C++ CI green pending Colab/Modal run.
 
@@ -160,6 +170,8 @@ Each milestone has the same shape:
 
 ---
 
+
+
 ## M2 — Naive CUDA multi-kernel baseline
 
 **Effort:** M · **Depends on:** M1
@@ -173,17 +185,21 @@ Each milestone has the same shape:
 
 **TODOs.**
 
-- [ ] `csrc/attention_naive.cu` — three kernels: `qk_matmul`, `row_softmax`, `pv_matmul`.
-- [ ] Simple launch wrapper `attention_naive_forward(Q, K, V, O)`.
-- [ ] Correctness test: `tests/test_attention_naive.cu` (or Python via a thin `ctypes`/`pybind11` shim) — assert vs CPU ref, tolerance ~`1e-4` fp32.
-- [ ] Log the peak transient memory (`S` and `P` allocations) for `N ∈ {128, 256, 512, 1024, 2048, 4096}` to `benchmarks/results/naive_memory.csv`.
-- [ ] Add a "memory-bound" note in `docs/memory_analysis.md` (rough version, finalized in M9).
+- [x] `theory/M2.md` — beginner-friendly, self-contained theory (mirrors `theory/M1.md` style; explains three-kernel decomposition, CUDA idioms, HBM byte accounting, roofline argument).
+- [x] `csrc/attention_naive.cu` — three kernels: `qk_matmul`, `row_softmax`, `pv_matmul`. API in `csrc/attention_naive.cuh`.
+- [x] Simple launch wrapper `attention_naive_forward(Q, K, V, O, B, H, N, D, is_causal)` + a host-pointer overload `attention_naive_forward_host` for tests.
+- [x] Correctness test: `tests/cpp/test_attention_naive.cu` (GoogleTest; decision recorded — pure C++/CUDA, no pybind11 until M4) — asserts vs CPU ref, tolerance `5e-4` abs fp32 (per `docs/AGENTS.md` §9).
+- [x] Log the peak transient memory (`S` and `P` allocations) for `N ∈ {128, 256, 512, 1024, 2048, 4096}` to `benchmarks/results/naive_memory.csv`, via `benchmarks/naive_memory.py`.
+- [x] Plot HBM footprint vs `N` on log-log axes → `docs/plots/naive_memory.png` (via `benchmarks/plot_naive_memory.py`).
+- [x] Add a "memory-bound" note in `docs/memory_analysis.md` (rough version, finalized in M9).
+
+**Status.** Complete pending GPU-side test run. All artifacts land on Mac-local (Python CSV/plot + `theory/M2.md`); the GoogleTest binary (`test_attention_naive`) requires CUDA and will be exercised on the next Colab T4 bootstrap. `docs/AGENTS.md` §9 fp32 tolerance (5e-4) reused unchanged; no new global config.
 
 **Verification plan.**
 
-- Correctness passes for `B=1, H=1, N ∈ {64, 128, 512, 1024}`, `D ∈ {32, 64}`, causal ∈ {False, True}.
-- CSV shows quadratic memory growth in `N`.
-- One plot: HBM footprint vs `N` on log-log axes → `docs/plots/naive_memory.png`.
+- Correctness passes for `B=1, H=1, N ∈ {64, 128, 512, 1024}`, `D ∈ {32, 64}`, causal ∈ {False, True}. (16 parametrized cases + 4 edge cases = 20 GoogleTests.)
+- CSV shows quadratic memory growth in `N` — confirmed: `S` at `N=4096` is 64 MB; slope-2 fit on log-log plot.
+- One plot: HBM footprint vs `N` on log-log axes → `docs/plots/naive_memory.png`. ✓
 
 **Understanding checkpoint.**
 
@@ -193,6 +209,8 @@ Each milestone has the same shape:
 **Portfolio hook.** *"I built the straw man honestly so the improvement is measurable, not narrated."*
 
 ---
+
+
 
 ## M3 — Online softmax reference (the intellectual core)
 
@@ -230,6 +248,8 @@ Each milestone has the same shape:
 
 ---
 
+
+
 ## M4 — FlashAttention v1 forward kernel
 
 **Effort:** L · **Depends on:** M2, M3
@@ -263,6 +283,8 @@ Each milestone has the same shape:
 **Portfolio hook.** *"The N×N attention matrix never touches HBM — I can point to the exact lines."*
 
 ---
+
+
 
 ## M5 — Test & benchmark harness (formalize)
 
@@ -299,9 +321,11 @@ Each milestone has the same shape:
 1. Why median-of-N and not mean? Why warm-up?
 2. What's the failure mode if you forget `torch.cuda.synchronize` before stopping the timer?
 
-**Portfolio hook.** *"Every claim in the README traces back to a row in `all.csv`."*
+**Portfolio hook.** *"Every claim in the README traces back to a row in* `all.csv`*."*
 
 ---
+
+
 
 ## M6 — FlashAttention v2: memory-layout & occupancy tuning
 
@@ -320,7 +344,7 @@ Each milestone has the same shape:
 - [ ] Vectorized loads (`float4` or `__ldg` where appropriate) for Q/K/V.
 - [ ] Shared-memory layout revision (padded / swizzled) — document the conflict math in comments.
 - [ ] Review register usage (`--ptxas-options=-v`), tune `Br/Bc` for occupancy.
-- [ ] **Artifact: `docs/ptxas_v1_vs_v2.md`** — checked-in `ptxas -v` output for both kernels side-by-side (registers/thread, shared-mem/CTA, stack, spill loads/stores), with a two-paragraph interpretation.
+- [ ] **Artifact:** `docs/ptxas_v1_vs_v2.md` — checked-in `ptxas -v` output for both kernels side-by-side (registers/thread, shared-mem/CTA, stack, spill loads/stores), with a two-paragraph interpretation.
 - [ ] Correctness passes on the same grid as v1.
 - [ ] Runs faster than v1 on at least `N ≥ 512, D=64`; log the improvement in `docs/flash_attention_notes.md`.
 - [ ] Naming/registration in the harness so v1 and v2 appear side-by-side in plots.
@@ -340,6 +364,8 @@ Each milestone has the same shape:
 **Portfolio hook.** *"I profiled v1, formed a hypothesis, changed one thing, and can prove the metric moved."*
 
 ---
+
+
 
 ## M7 — Practical features: batch, multi-head, causal, boundaries
 
@@ -377,6 +403,8 @@ Each milestone has the same shape:
 
 ---
 
+
+
 ## M8 — Mixed precision: fp16 input, fp32 accumulation
 
 **Effort:** M · **Depends on:** M7
@@ -411,6 +439,8 @@ Each milestone has the same shape:
 
 ---
 
+
+
 ## M9 — Nsight Compute deep dive, roofline, and the four writeups
 
 **Effort:** M · **Depends on:** M6 (min), better after M8
@@ -432,7 +462,7 @@ Each milestone has the same shape:
 - [ ] `docs/memory_analysis.md` — finalize: HBM bytes analytical estimate, compare to measured DRAM throughput × runtime.
 - [ ] `docs/online_softmax_derivation.md` — finalize with the M3 toy example.
 - [ ] `docs/nsight_comparison.md` — naive vs Flash v1 vs Flash v2, one metric per paragraph, one screenshot per paragraph.
-- [ ] **`docs/backward_pass_conceptual.md`** — 1–2 pages, no code. Cover: (a) what the backward needs (`dQ, dK, dV` from `dO`), (b) the recomputation trick (only stashed `(m, l)` per row, recompute `S`/`P` block-by-block on the backward pass), (c) why this makes training feasible without HBM blowup, (d) what a real implementation would need that this repo does not have. State explicitly at the top: *"conceptual only — not implemented in this repo."*
+- [ ] `docs/backward_pass_conceptual.md` — 1–2 pages, no code. Cover: (a) what the backward needs (`dQ, dK, dV` from `dO`), (b) the recomputation trick (only stashed `(m, l)` per row, recompute `S`/`P` block-by-block on the backward pass), (c) why this makes training feasible without HBM blowup, (d) what a real implementation would need that this repo does not have. State explicitly at the top: *"conceptual only — not implemented in this repo."*
 - [ ] Cross-link all four writeups + the roofline from `README.md` and `WRITEUP.md`.
 
 **Verification plan.**
@@ -454,6 +484,8 @@ Each milestone has the same shape:
 
 ---
 
+
+
 ## M10 — PyTorch extension, analytical SDPA/`flash-attn` comparison, portfolio polish
 
 **Effort:** M · **Depends on:** M7 (min), better after M9
@@ -473,7 +505,7 @@ Each milestone has the same shape:
 - [ ] `tests/test_against_torch.py` covering all shapes from M7 + fp16 from M8.
 - [ ] `benchmarks/bench_attention.py` extended with `torch_sdpa` and (optionally, guarded) `flash_attn` variants.
 - [ ] Comparison plot: your v2 vs `torch_sdpa` vs `flash_attn` on the full grid.
-- [ ] **`notebooks/demo.ipynb`** — 30-second demo. Loads the extension, runs naive + Flash v2 on one canonical shape, prints hero speedup + max abs error vs CPU ref, renders the hero plot inline. This is the file recruiters open first.
+- [ ] `notebooks/demo.ipynb` — 30-second demo. Loads the extension, runs naive + Flash v2 on one canonical shape, prints hero speedup + max abs error vs CPU ref, renders the hero plot inline. This is the file recruiters open first.
 - [ ] **Fill in the hero result** in `WRITEUP.md` (placeholder created in M0). Pick one shape from `benchmarks/results/all.csv` and freeze the number: `{speedup}× faster and {ratio}× less HBM traffic than naive at (B, H, N, D) = (…), fp32`. Also record: within `{k}×` of `flash-attn` at the same shape, with an honest one-line explanation.
 - [ ] `WRITEUP.md` — the single canonical long-form writeup. Sections: hero result → why naive is memory-bound → online softmax derivation (summarized, deep link to `docs/`) → the Flash kernel walkthrough → v2 optimizations with roofline → analytical comparison to `torch_sdpa` and `flash-attn` (the "reading the gap" section) → conceptual backward pass → future work. This is the *one file* you would share as a link.
 - [ ] README section "Reading the gap to `flash-attn`" — for each shape where you're slower, name the specific optimization that would close it (tensor-core MMA, async `cp.async` pipelining, split-K, softcap fusion, etc.). This is the section that most demonstrates you paid attention.
@@ -510,6 +542,8 @@ Each milestone has the same shape:
 
 ---
 
+
+
 ## Anti-scope guardrails (re-read before starting each milestone)
 
 - No backward pass. If you want it later, that's a **separate repo**.
@@ -520,20 +554,24 @@ Each milestone has the same shape:
 - Do not skip M3 (online softmax as a standalone artifact) — it is the intellectual heart of the project.
 - Do not skip the writeups or the roofline plot. The code + prose + one hero number is what makes the repo showcase-worthy.
 
+
+
 ## Progress ledger
 
-| # | Milestone | Effort | Status |
-|---|---|---|---|
-| M0 | Repo scaffolding & source-of-truth setup | S | [x] |
-| M1 | CPU reference + PyTorch oracle | S | [x] |
-| M2 | Naive CUDA multi-kernel baseline | M | [ ] |
-| M3 | Online softmax reference | M | [ ] |
-| M4 | FlashAttention v1 forward kernel | L | [ ] |
-| M5 | Test & benchmark harness (formalize) | M | [ ] |
-| M6 | FlashAttention v2 layout & occupancy | L | [ ] |
-| M7 | Batch, multi-head, causal, boundaries | L | [ ] |
-| M8 | Mixed precision (fp16 in / fp32 accum) | M | [ ] |
-| M9 | Nsight deep dive & three writeups | M | [ ] |
-| M10 | PyTorch extension, SDPA comparison, polish | M | [ ] |
+
+| #   | Milestone                                  | Effort | Status |
+| --- | ------------------------------------------ | ------ | ------ |
+| M0  | Repo scaffolding & source-of-truth setup   | S      | [x]    |
+| M1  | CPU reference + PyTorch oracle             | S      | [x]    |
+| M2  | Naive CUDA multi-kernel baseline           | M      | [~]    |
+| M3  | Online softmax reference                   | M      | [ ]    |
+| M4  | FlashAttention v1 forward kernel           | L      | [ ]    |
+| M5  | Test & benchmark harness (formalize)       | M      | [ ]    |
+| M6  | FlashAttention v2 layout & occupancy       | L      | [ ]    |
+| M7  | Batch, multi-head, causal, boundaries      | L      | [ ]    |
+| M8  | Mixed precision (fp16 in / fp32 accum)     | M      | [ ]    |
+| M9  | Nsight deep dive & three writeups          | M      | [ ]    |
+| M10 | PyTorch extension, SDPA comparison, polish | M      | [ ]    |
+
 
 Update this table (and check off the TODOs inside each milestone) as you go. It's the repo's honest self-report — treat it like part of the deliverable.
