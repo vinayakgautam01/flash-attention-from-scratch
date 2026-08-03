@@ -118,7 +118,7 @@ __global__ void attention_online_ref_kernel(
     const int nblocks = (N + Bc - 1) / Bc;
     (void)B;  // kept in signature for symmetry with attention_naive; unused inside.
 
-    for (int b_idx = 0; b_idx < nblocks; ++b_idx) {/m
+    for (int b_idx = 0; b_idx < nblocks; ++b_idx) {
         const int j = b_idx * Bc + t;
         const bool j_in_range = (j < N);
         const bool j_causal_ok = (!is_causal) || (j <= i);
