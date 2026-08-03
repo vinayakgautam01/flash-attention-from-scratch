@@ -74,6 +74,21 @@ if(HAVE_CUDA)
     target_compile_options(attention_naive PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>
     )
+
+    # M3: online-softmax reference kernel. Standalone artifact proving the
+    # streaming (m, ℓ, Õ) recurrence works before M4 adds Q-tiling. Same
+    # target shape as attention_naive (static lib, C++17, ptxas -v).
+    add_library(attention_online_ref STATIC csrc/attention_online_ref.cu)
+    target_include_directories(attention_online_ref PUBLIC ${CMAKE_SOURCE_DIR}/csrc)
+    target_link_libraries(attention_online_ref PUBLIC attention_cpu_ref)
+    set_target_properties(attention_online_ref PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+    )
+    target_compile_features(attention_online_ref PUBLIC cxx_std_17 cuda_std_17)
+    target_compile_options(attention_online_ref PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>
+    )
 endif()
 
 # M1: GoogleTest for pure-C++ host-side unit tests. Decision recorded in
@@ -120,6 +135,21 @@ if(BUILD_TESTING)
         # INSTANTIATE_TEST_SUITE_P macro requires C++17 in its expansion.
         target_compile_features(test_attention_naive PRIVATE cxx_std_17 cuda_std_17)
         gtest_discover_tests(test_attention_naive)
+
+        # M3: online-softmax reference correctness — same pattern.
+        add_executable(test_attention_online_ref
+            tests/cpp/test_attention_online_ref.cu
+        )
+        target_link_libraries(test_attention_online_ref PRIVATE
+            attention_online_ref
+            attention_cpu_ref
+            GTest::gtest_main
+        )
+        set_target_properties(test_attention_online_ref PROPERTIES
+            CUDA_SEPARABLE_COMPILATION ON
+        )
+        target_compile_features(test_attention_online_ref PRIVATE cxx_std_17 cuda_std_17)
+        gtest_discover_tests(test_attention_online_ref)
     endif()
 endif()
 
