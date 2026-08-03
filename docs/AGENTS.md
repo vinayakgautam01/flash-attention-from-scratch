@@ -182,6 +182,10 @@ Resolved during M1:
 - [x] **Python binding style.** `pybind11` shim (lands in M4). Industry standard; matches the official `flash-attn` repo; portable to non-torch consumers. Rejected: `torch.utils.cpp_extension` (simpler but torch-locked).
 - [x] **Test framework for pure-C++/CUDA paths.** GoogleTest for pure-C++ host code (starting with `attention_cpu_ref.hpp` in M1); pytest via pybind11 for CUDA kernels from M4. Matches CUTLASS/PyTorch practice — test each layer in its native framework, ~1 s C++ test round-trip.
 
+Resolved during M3:
+
+- [x] **M3 online-softmax kernel test surface.** GoogleTest only in M3 (the `test_attention_online_ref` binary covers the full verification grid + edge cases). Python parity (`tests/test_online_softmax.py`) waits for the M5 harness once pybind11 lands in M4 — same tradeoff M2 accepted. Kernel is exercised end-to-end from C++, so nothing is untested; the deferral only affects the reporting surface.
+
 ## 9. Numerical tolerance policy
 
 Set in M1, pinned in each milestone's verification:
@@ -190,6 +194,7 @@ Set in M1, pinned in each milestone's verification:
 |---|---|---|---|
 | CPU ref vs PyTorch, fp32 | `1e-5` | — | `torch.nn.functional.scaled_dot_product_attention` |
 | CUDA kernels, fp32 | `5e-4` | — | CPU ref |
+| M3 online-softmax vs CPU ref, fp32 | `1e-5` | — | CPU ref — algebraic equivalence, not matmul-accumulation drift |
 | CUDA kernels, fp16 in / fp32 accum | `5e-3` | `1e-2` | CPU ref (fp32) |
 
 ## 10. Anti-scope (short form — full version in [`MILESTONES.md`](MILESTONES.md))

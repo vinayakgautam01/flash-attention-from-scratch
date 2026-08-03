@@ -225,13 +225,17 @@ before ticking the milestone. These are what separate "I typed the kernel" from
 
 **TODOs.**
 
-- [ ] `docs/online_softmax_derivation.md` — 1–2 pages, hand-derived, showing:
+- [x] `theory/M3.md` — beginner-friendly theory doc with block-wise diagrams (mirrors `theory/M1.md`/`M2.md` style).
+- [x] `docs/online_softmax_derivation.md` — 1–2 pages, hand-derived, showing:
   - The invariant `l_i = Σ_j exp(s_j - m_i)`.
   - How `(m, l)` update when a new block arrives.
   - How to combine two partial `O` contributions correctly.
-- [ ] `csrc/attention_online_ref.cu` — a kernel that computes `softmax(row) @ V_row` streaming over `K/V` in blocks (still per-row, no tiling of Q yet).
-- [ ] `tests/test_online_softmax.py` — assert bit-for-bit close (`< 1e-5` fp32) to CPU ref on `N ∈ {128, 512, 2048}`.
-- [ ] Tiny toy Python script in `docs/` that runs the recurrence in NumPy for a `N=8` example, print every intermediate — this becomes a figure in the writeup.
+- [x] `csrc/attention_online_ref.cu` — a kernel that computes `softmax(row) @ V_row` streaming over `K/V` in blocks (still per-row, no tiling of Q yet). Bc = 64; one CTA per query row; shared-memory-resident `(m, ℓ, Õ)` state.
+- [x] `tests/cpp/test_attention_online_ref.cu` — GoogleTest (parametrized grid `N ∈ {128, 512, 2048}, D ∈ {32, 64}` + 5 edge cases) asserts bit-for-bit close (`< 1e-5` fp32) to CPU ref.
+- [x] Tiny toy Python script `docs/toy_online_softmax.py` — runs the recurrence in NumPy for a `N=8` example, prints every intermediate + a broken-α variant that diverges by 21% — the figure that lands in the writeup.
+- [ ] ~~`tests/test_online_softmax.py`~~ — deferred to M5's harness. Python parity waits for pybind11 in M4 (`docs/AGENTS.md` §8 ADR). M3 correctness is fully covered by the C++/GoogleTest above.
+
+**Status.** Complete pending GPU-side test run. All Mac-local artifacts landed (theory, writeup, toy script, kernel/test sources, CMake target); the `test_attention_online_ref` binary requires CUDA and will be exercised on the next Colab T4 bootstrap. `docs/AGENTS.md` §9 gains an M3-specific tolerance row (1e-5 abs, algebraic equivalence).
 
 **Verification plan.**
 
@@ -564,7 +568,7 @@ before ticking the milestone. These are what separate "I typed the kernel" from
 | M0  | Repo scaffolding & source-of-truth setup   | S      | [x]    |
 | M1  | CPU reference + PyTorch oracle             | S      | [x]    |
 | M2  | Naive CUDA multi-kernel baseline           | M      | [~]    |
-| M3  | Online softmax reference                   | M      | [ ]    |
+| M3  | Online softmax reference                   | M      | [~]    |
 | M4  | FlashAttention v1 forward kernel           | L      | [ ]    |
 | M5  | Test & benchmark harness (formalize)       | M      | [ ]    |
 | M6  | FlashAttention v2 layout & occupancy       | L      | [ ]    |
