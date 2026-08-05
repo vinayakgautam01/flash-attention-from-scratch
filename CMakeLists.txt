@@ -89,6 +89,22 @@ if(HAVE_CUDA)
     target_compile_options(attention_online_ref PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>
     )
+
+    # M4: FlashAttention v1 forward kernel. Tiles Q into Br-row blocks and
+    # streams K/V in Bc-column tiles, applying M3's online-softmax recurrence
+    # for Br rows in lock-step so S and P never touch HBM. Same target shape
+    # as attention_online_ref (static lib, C++17, ptxas -v).
+    add_library(flash_fwd_v1 STATIC csrc/flash_fwd_v1.cu)
+    target_include_directories(flash_fwd_v1 PUBLIC ${CMAKE_SOURCE_DIR}/csrc)
+    target_link_libraries(flash_fwd_v1 PUBLIC attention_cpu_ref)
+    set_target_properties(flash_fwd_v1 PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+    )
+    target_compile_features(flash_fwd_v1 PUBLIC cxx_std_17 cuda_std_17)
+    target_compile_options(flash_fwd_v1 PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>
+    )
 endif()
 
 # M1: GoogleTest for pure-C++ host-side unit tests. Decision recorded in
@@ -150,6 +166,21 @@ if(BUILD_TESTING)
         )
         target_compile_features(test_attention_online_ref PRIVATE cxx_std_17 cuda_std_17)
         gtest_discover_tests(test_attention_online_ref)
+
+        # M4: FlashAttention v1 forward correctness — same pattern.
+        add_executable(test_flash_fwd_v1
+            tests/cpp/test_flash_fwd_v1.cu
+        )
+        target_link_libraries(test_flash_fwd_v1 PRIVATE
+            flash_fwd_v1
+            attention_cpu_ref
+            GTest::gtest_main
+        )
+        set_target_properties(test_flash_fwd_v1 PROPERTIES
+            CUDA_SEPARABLE_COMPILATION ON
+        )
+        target_compile_features(test_flash_fwd_v1 PRIVATE cxx_std_17 cuda_std_17)
+        gtest_discover_tests(test_flash_fwd_v1)
     endif()
 endif()
 
