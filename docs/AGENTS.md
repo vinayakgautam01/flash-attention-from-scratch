@@ -186,6 +186,12 @@ Resolved during M3:
 
 - [x] **M3 online-softmax kernel test surface.** GoogleTest only in M3 (the `test_attention_online_ref` binary covers the full verification grid + edge cases). Python parity (`tests/test_online_softmax.py`) waits for the M5 harness once pybind11 lands in M4 — same tradeoff M2 accepted. Kernel is exercised end-to-end from C++, so nothing is untested; the deferral only affects the reporting surface.
 
+Resolved during M4:
+
+- [x] **M4 tile sizes.** `Br = Bc = 32`. Reasons: (a) fits Colab T4's 48 KB per-CTA default smem budget for `D ∈ {32, 64}` without opt-in (`smem = 37,120 B` at `D=64`, `20,736 B` at `D=32` — see `theory/M4.md` §7); (b) hits CUDA's 1024 threads/CTA hard cap exactly at `Br * Bc = 1024`. Larger tiles need register-resident `Õ` (M6) or `D`-specialized paths (M7).
+- [x] **M4 test surface.** GoogleTest only, same tradeoff as M2/M3. `test_flash_fwd_v1` covers the MILESTONES §M4 grid + edge cases (including an M4-specific `N = 257` case that exercises partial Q-tile *and* KV-tile tails). Python parity waits for M5 harness / pybind11.
+- [x] **`v2 backlog` file.** M4's TODO 5 asks for a note on inefficiencies deferred to v2. The document is [`flash_attention_notes.md`](flash_attention_notes.md); it also functions as M6's TODO list.
+
 ## 9. Numerical tolerance policy
 
 Set in M1, pinned in each milestone's verification:

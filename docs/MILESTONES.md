@@ -267,11 +267,14 @@ before ticking the milestone. These are what separate "I typed the kernel" from
 
 **TODOs.**
 
-- [ ] `csrc/flash_fwd_v1.cu` — start with fixed `B=1, H=1`, `D ∈ {32, 64}`, non-causal.
-- [ ] Choose `Br`, `Bc` from shared-memory budget; document the calculation in a comment header.
-- [ ] Correctness test vs CPU ref for `N ∈ {128, 256, 512, 1024, 2048}`, `D ∈ {32, 64}`, tolerance `< 5e-4` fp32.
-- [ ] First-pass benchmark vs `attention_naive`: runtime + HBM-bytes-transferred (via Nsight if easy, else analytically), logged to `benchmarks/results/v1_vs_naive.csv`.
-- [ ] Note obvious inefficiencies you're leaving for v2 (bank conflicts? uncoalesced loads? low occupancy?) in `docs/flash_attention_notes.md`.
+- [x] `theory/M4.md` — beginner-friendly theory doc with tile diagrams, launch-config decoder, and step-by-step thread-mapping walk (mirrors `theory/M2.md`/`M3.md`).
+- [x] `csrc/flash_fwd_v1.cu` — start with fixed `B=1, H=1`, `D ∈ {32, 64}`, non-causal. Kernel handles any `(B, H)` in signature; tests pin to `(1, 1)` per anti-scope.
+- [x] Choose `Br`, `Bc` from shared-memory budget; document the calculation in a comment header. **Picked `Br = Bc = 32`** — fits 48 KB default T4 smem AND 1024 threads/CTA cap for `D ∈ {32, 64}`.
+- [x] Correctness test vs CPU ref for `N ∈ {128, 256, 512, 1024, 2048}`, `D ∈ {32, 64}`, tolerance `< 5e-4` fp32. Includes `N = 257` case (partial Q-tile *and* KV-tile tails) even though MILESTONES doesn't require it — otherwise M7 inherits an untested tail path.
+- [ ] First-pass benchmark vs `attention_naive`: runtime + HBM-bytes-transferred (via Nsight if easy, else analytically), logged to `benchmarks/results/v1_vs_naive.csv`. **Deferred to Colab T4 bootstrap run** (Mac-local can't exercise the kernel).
+- [x] Note obvious inefficiencies you're leaving for v2 (bank conflicts? uncoalesced loads? low occupancy?) in `docs/flash_attention_notes.md`.
+
+**Status.** Complete pending GPU-side test run + benchmark. All Mac-local artifacts landed (`theory/M4.md`, `csrc/flash_fwd_v1.{cuh,cu}`, `tests/cpp/test_flash_fwd_v1.cu`, `docs/flash_attention_notes.md`, `CMakeLists.txt`). The `test_flash_fwd_v1` binary requires CUDA and will be exercised on the next Colab T4 bootstrap; the v1-vs-naive benchmark row is the remaining M4 TODO before ticking the ledger.
 
 **Verification plan.**
 
@@ -569,7 +572,7 @@ before ticking the milestone. These are what separate "I typed the kernel" from
 | M1  | CPU reference + PyTorch oracle             | S      | [x]    |
 | M2  | Naive CUDA multi-kernel baseline           | M      | [~]    |
 | M3  | Online softmax reference                   | M      | [~]    |
-| M4  | FlashAttention v1 forward kernel           | L      | [ ]    |
+| M4  | FlashAttention v1 forward kernel           | L      | [~]    |
 | M5  | Test & benchmark harness (formalize)       | M      | [ ]    |
 | M6  | FlashAttention v2 layout & occupancy       | L      | [ ]    |
 | M7  | Batch, multi-head, causal, boundaries      | L      | [ ]    |
