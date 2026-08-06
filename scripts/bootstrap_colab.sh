@@ -75,7 +75,17 @@ ok "$(git log -1 --oneline)"
 if [ "${SKIP_PIP}" != "1" ]; then
     banner "4. Python deps"
     pip install --quiet --upgrade pip
-    pip install --quiet -e ".[dev]"
+    # M5+ our package is a PyTorch C++ extension. `pip install -e .` MUST run
+    # with --no-build-isolation so CMake uses the *runtime* torch (ABI-correct)
+    # instead of pulling a fresh copy into an isolated venv — that path is
+    # slow (torch is ~2 GB), often OOMs the Colab sandbox, and produces a
+    # `_C.so` whose ABI doesn't match the torch that will actually load it.
+    # --no-build-isolation requires the build tools to be present in the
+    # runtime env, so we install them explicitly first.
+    pip install --quiet "scikit-build-core>=0.9" "pybind11>=2.12"
+    # No --quiet on the extension install: if CMake or nvcc fails we want
+    # the real error surfacing on stderr, not swallowed into a subprocess.
+    pip install -e ".[dev]" --no-build-isolation
     ok "pip install complete"
 else
     warn "SKIP_PIP=1 → not touching python env"
