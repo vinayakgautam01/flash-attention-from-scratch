@@ -42,7 +42,13 @@ wheel.packages = ["flash_from_scratch"]
 # Only build the pybind11 extension target from pip. The `hello` binary and
 # every GoogleTest binary are dev-only and driven by `scripts/build.sh`.
 build.targets = ["_C"]
+# Persistent CMake build tree — required when `editable.rebuild = true` is
+# set (current scikit-build-core refuses to guess a path). Kept under
+# `build/pyext/` so it doesn't collide with `scripts/build.sh`'s tree at
+# `build/`. `{wheel_tag}` isolates per-Python-version builds.
+build-dir = "build/pyext/{wheel_tag}"
 # Editable installs: rebuild the extension on import when C++ sources change.
+# The build-dir above is where the incremental artifacts live between rebuilds.
 editable.rebuild = true
 
 [tool.scikit-build.cmake.define]
