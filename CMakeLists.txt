@@ -265,8 +265,21 @@ if(BUILD_PY_EXT)
     # pass, which CMake runs when CUDA_RESOLVE_DEVICE_SYMBOLS is set on the
     # dependent target. Without this, `_C.so` builds but has unresolved
     # `__cudaRegisterFunction` / device relocations at load time.
+    #
+    # RPATH: torch ships libtorch.so / libtorch_python.so / libc10.so in
+    # `${TORCH_INSTALL_PREFIX}/lib`. That directory is normally NOT on the
+    # dynamic-linker's search path, so importing `_C.so` fails with
+    # `ImportError: libtorch.so: cannot open shared object file`. We bake
+    # the torch lib dir into both BUILD and INSTALL RPATHs so the loader
+    # finds torch's libs at import time no matter how / where `_C.so` was
+    # placed (source tree for editable installs, site-packages for wheels).
+    # This is exactly what `torch.utils.cpp_extension.BuildExtension` does
+    # for setuptools-driven builds; scikit-build-core doesn't inject it,
+    # so we do it explicitly.
     set_target_properties(_C PROPERTIES
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
+        BUILD_RPATH   "${TORCH_INSTALL_PREFIX}/lib"
+        INSTALL_RPATH "${TORCH_INSTALL_PREFIX}/lib"
     )
 
     # Install into the wheel under flash_from_scratch/ so
