@@ -29,9 +29,10 @@ dev = [
 ]
 
 [tool.scikit-build]
-# Match the pinned CMake floor in `docs/AGENTS.md` §3. scikit-build-core
-# interprets a bare version as a minimum (>=), so "3.24" is equivalent to ">=3.24".
-cmake.version = "3.24"
+# Match the pinned CMake floor in `docs/AGENTS.md` §3. Must be a PEP 440
+# specifier string (e.g. ">=3.24"); a bare version like "3.24" is rejected
+# by current scikit-build-core with `InvalidSpecifier`.
+cmake.version = ">=3.24"
 # Release for wheel builds; devs building the GoogleTest binaries via
 # `scripts/build.sh` set CMAKE_BUILD_TYPE separately and are unaffected.
 cmake.build-type = "Release"
