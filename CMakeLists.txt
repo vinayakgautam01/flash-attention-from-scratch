@@ -244,7 +244,15 @@ if(BUILD_PY_EXT)
                  PATHS "${TORCH_INSTALL_PREFIX}/lib"
                  REQUIRED)
 
-    pybind11_add_module(_C MODULE csrc/bindings.cpp)
+    # Note: bindings source file is `.cu` (not `.cpp`) on purpose. The file
+    # itself is pure C++ (pybind11 macros + torch::Tensor + TORCH_CHECK), but
+    # naming it `.cu` makes CMake treat the `_C` target as a CUDA-language
+    # target, which is what triggers the automatic device-link step against
+    # our separably-compiled CUDA static libs (attention_naive et al.).
+    # Alternatives (e.g. LINKER_LANGUAGE=CUDA on a .cpp target) fail to emit
+    # the fatbin data into a pybind11 MODULE library, producing a `_C.so`
+    # that loads with `undefined symbol: fatbinData` at import time.
+    pybind11_add_module(_C MODULE csrc/bindings.cu)
     target_link_libraries(_C PRIVATE
         attention_naive
         attention_online_ref
@@ -276,17 +284,21 @@ if(BUILD_PY_EXT)
     # This is exactly what `torch.utils.cpp_extension.BuildExtension` does
     # for setuptools-driven builds; scikit-build-core doesn't inject it,
     # so we do it explicitly.
-    # LINKER_LANGUAGE CUDA is the key: bindings.cpp is pure C++, so without
-    # this hint CMake would link `_C.so` with the CXX linker (g++), which
-    # doesn't know how to run nvcc's device-link pass. That leaves separable-
-    # compilation runtime symbols like `fatbinData` unresolved and the
-    # extension fails to load at import with:
-    #    ImportError: undefined symbol: fatbinData
-    # Setting LINKER_LANGUAGE=CUDA forces nvcc to drive the final link,
-    # which resolves device symbols AND satisfies CUDA_RESOLVE_DEVICE_SYMBOLS.
+    # Because `bindings.cu` is CUDA-language, CMake infers the target's link
+    # language as CUDA — so nvcc drives the final link, which properly emits
+    # the fatbin. `CUDA_RESOLVE_DEVICE_SYMBOLS ON` then invokes the device-
+    # link pass over the separably-compiled CUDA static libs so their device
+    # code is resolved into `_C.so`.
+    #
+    # RPATH: torch ships libtorch.so / libtorch_python.so / libc10.so in
+    # `${TORCH_INSTALL_PREFIX}/lib`, which is normally not on the dynamic
+    # linker's search path. Baking it into BUILD_RPATH and INSTALL_RPATH
+    # lets `_C.so` find torch's shared libs at import time whether it was
+    # loaded from an editable source tree or a site-packages wheel. This is
+    # the same RPATH that `torch.utils.cpp_extension.BuildExtension` sets
+    # for setuptools-driven torch extensions.
     set_target_properties(_C PROPERTIES
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
-        LINKER_LANGUAGE CUDA
         BUILD_RPATH   "${TORCH_INSTALL_PREFIX}/lib"
         INSTALL_RPATH "${TORCH_INSTALL_PREFIX}/lib"
     )
