@@ -276,8 +276,17 @@ if(BUILD_PY_EXT)
     # This is exactly what `torch.utils.cpp_extension.BuildExtension` does
     # for setuptools-driven builds; scikit-build-core doesn't inject it,
     # so we do it explicitly.
+    # LINKER_LANGUAGE CUDA is the key: bindings.cpp is pure C++, so without
+    # this hint CMake would link `_C.so` with the CXX linker (g++), which
+    # doesn't know how to run nvcc's device-link pass. That leaves separable-
+    # compilation runtime symbols like `fatbinData` unresolved and the
+    # extension fails to load at import with:
+    #    ImportError: undefined symbol: fatbinData
+    # Setting LINKER_LANGUAGE=CUDA forces nvcc to drive the final link,
+    # which resolves device symbols AND satisfies CUDA_RESOLVE_DEVICE_SYMBOLS.
     set_target_properties(_C PROPERTIES
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
+        LINKER_LANGUAGE CUDA
         BUILD_RPATH   "${TORCH_INSTALL_PREFIX}/lib"
         INSTALL_RPATH "${TORCH_INSTALL_PREFIX}/lib"
     )
