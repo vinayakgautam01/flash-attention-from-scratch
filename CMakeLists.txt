@@ -184,7 +184,98 @@ if(BUILD_TESTING)
     endif()
 endif()
 
+# M5: pybind11 shim exposing every CUDA kernel to Python as
+# `flash_from_scratch._C`. Gated on BUILD_PY_EXT so the default
+# `scripts/build.sh` (which builds `hello` + GoogleTest) is unaffected.
+# Enabled automatically by scikit-build-core via pyproject.toml.
+# Requires CUDA (the shim links against the CUDA static libs) AND libtorch
+# (the shim takes `torch::Tensor`). Auto-locates Torch via the running
+# Python's `torch.utils.cmake_prefix_path`.
+option(BUILD_PY_EXT "Build the flash_from_scratch._C pybind11 extension (M5)" OFF)
+if(BUILD_PY_EXT)
+    if(NOT HAVE_CUDA)
+        message(FATAL_ERROR "BUILD_PY_EXT=ON requires CUDA; skip the Python "
+                            "extension on hosts without a CUDA toolkit.")
+    endif()
+
+    # Locate Python (used both for Torch prefix resolution and pybind11 discovery).
+    find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
+
+    # Torch: resolve CMake prefix from the active Python. This is the standard
+    # scikit-build-core / setuptools-cpp-extension recipe and avoids hard-coding
+    # a libtorch path across Colab / Modal / local venvs.
+    if(NOT Torch_DIR)
+        execute_process(
+            COMMAND ${Python_EXECUTABLE} -c
+                "import torch, os; print(os.path.join(torch.utils.cmake_prefix_path, 'Torch'))"
+            OUTPUT_VARIABLE Torch_DIR
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE _torch_dir_rc
+        )
+        if(NOT _torch_dir_rc EQUAL 0)
+            message(FATAL_ERROR "BUILD_PY_EXT=ON: failed to locate Torch's "
+                                "CMake config via Python; is `torch` installed "
+                                "in the environment used to configure CMake?")
+        endif()
+    endif()
+    find_package(Torch REQUIRED CONFIG)
+
+    # pybind11: prefer the copy bundled with `pip install pybind11` (found via
+    # its own CMake helper). scikit-build-core supplies it in the isolated
+    # build env; local devs get it from `pip install pybind11`.
+    execute_process(
+        COMMAND ${Python_EXECUTABLE} -m pybind11 --cmakedir
+        OUTPUT_VARIABLE pybind11_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE _pb11_rc
+    )
+    if(NOT _pb11_rc EQUAL 0)
+        message(FATAL_ERROR "BUILD_PY_EXT=ON: pybind11 not found; "
+                            "install with `pip install pybind11`.")
+    endif()
+    find_package(pybind11 REQUIRED CONFIG)
+
+    # <torch/extension.h> needs the pybind11-Tensor caster which lives in
+    # libtorch_python.so — that library is NOT included in ${TORCH_LIBRARIES}
+    # and must be linked explicitly, otherwise `import _C` fails at load time
+    # with an undefined-symbol error on `THPVariable_Wrap` (or similar).
+    find_library(TORCH_PYTHON_LIBRARY
+                 NAMES torch_python
+                 PATHS "${TORCH_INSTALL_PREFIX}/lib"
+                 REQUIRED)
+
+    pybind11_add_module(_C MODULE csrc/bindings.cpp)
+    target_link_libraries(_C PRIVATE
+        attention_naive
+        attention_online_ref
+        flash_fwd_v1
+        ${TORCH_LIBRARIES}
+        ${TORCH_PYTHON_LIBRARY}
+    )
+    # torch::Tensor / TORCH_CHECK need C++17.
+    target_compile_features(_C PRIVATE cxx_std_17)
+    # Torch's CMake config injects -D_GLIBCXX_USE_CXX11_ABI=... and other
+    # required flags via ${TORCH_CXX_FLAGS}; propagate them to keep ABI in sync.
+    if(TORCH_CXX_FLAGS)
+        target_compile_options(_C PRIVATE ${TORCH_CXX_FLAGS})
+    endif()
+    # Our CUDA static libs are built with CUDA_SEPARABLE_COMPILATION ON, so
+    # they contain `-dc`-compiled device object files. Linking them into a
+    # CXX-language shared module requires nvcc's device-symbol-resolution
+    # pass, which CMake runs when CUDA_RESOLVE_DEVICE_SYMBOLS is set on the
+    # dependent target. Without this, `_C.so` builds but has unresolved
+    # `__cudaRegisterFunction` / device relocations at load time.
+    set_target_properties(_C PROPERTIES
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
+    )
+
+    # Install into the wheel under flash_from_scratch/ so
+    # `from flash_from_scratch import _C` resolves.
+    install(TARGETS _C LIBRARY DESTINATION flash_from_scratch)
+endif()
+
 if(HAVE_CUDA)
     message(STATUS "CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 endif()
 message(STATUS "Build type        : ${CMAKE_BUILD_TYPE}")
+message(STATUS "BUILD_PY_EXT      : ${BUILD_PY_EXT}")

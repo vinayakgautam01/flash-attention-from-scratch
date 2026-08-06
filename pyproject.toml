@@ -1,6 +1,15 @@
 [build-system]
-requires = ["setuptools>=61", "wheel"]
-build-backend = "setuptools.build_meta"
+# M5: switched from setuptools to scikit-build-core so `pip install -e .`
+# drives the existing CMakeLists.txt to build csrc/bindings.cpp into
+# `flash_from_scratch/_C.*.so`. pybind11 + torch (host-side ABI headers) are
+# build-time requirements; the runtime `torch` dependency below still pins
+# the ABI users link against.
+requires = [
+    "scikit-build-core>=0.9",
+    "pybind11>=2.12",
+    "torch>=2.4",
+]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "flash-attention-from-scratch"
@@ -19,10 +28,28 @@ dev = [
     "ruff>=0.5",
 ]
 
-[tool.setuptools]
-# No Python module in the repo yet. The pybind11 shim lands in M4/M5;
-# update this to `packages = ["flash_attention"]` at that point.
-py-modules = []
+[tool.scikit-build]
+# Match the pinned CMake floor in `docs/AGENTS.md` §3. scikit-build-core
+# interprets a bare version as a minimum (>=), so "3.24" is equivalent to ">=3.24".
+cmake.version = "3.24"
+# Release for wheel builds; devs building the GoogleTest binaries via
+# `scripts/build.sh` set CMAKE_BUILD_TYPE separately and are unaffected.
+cmake.build-type = "Release"
+# Ship the Python package under flash_from_scratch/. The compiled `_C.so`
+# lands next to it via the `install(TARGETS _C ...)` rule in CMakeLists.txt.
+wheel.packages = ["flash_from_scratch"]
+# Only build the pybind11 extension target from pip. The `hello` binary and
+# every GoogleTest binary are dev-only and driven by `scripts/build.sh`.
+build.targets = ["_C"]
+# Editable installs: rebuild the extension on import when C++ sources change.
+editable.rebuild = true
+
+[tool.scikit-build.cmake.define]
+# Flip the M5 gate in CMakeLists.txt so `_C` is built and installed.
+BUILD_PY_EXT = "ON"
+# Skip the GoogleTest suite during wheel builds (fetches ~30 MB and slows the
+# pip install noticeably). Tests still build under `scripts/build.sh`.
+BUILD_TESTING = "OFF"
 
 [tool.ruff]
 line-length = 100
