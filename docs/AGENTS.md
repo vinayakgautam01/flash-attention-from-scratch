@@ -157,7 +157,7 @@ After the very first run in a fresh session, paste the `./build/hello` output in
 
 ### Running on Modal A10G
 
-Modal setup lands in M5 (`modal_run.py`). Until then: same repo, same scripts, no env-var override needed (default arch already matches A10G).
+Same repo, same scripts, no env-var override needed (default arch already matches A10G). The M5 harness (`scripts/bench.sh`, `scripts/test.sh`) is host-agnostic — clone the repo on a Modal instance with a mounted CUDA toolkit, run `pip install -e .` (scikit-build-core builds the `_C` extension), then `scripts/test.sh` and `scripts/bench.sh` end-to-end. A dedicated `modal_run.py` wrapper is nice-to-have (portfolio-distinguishing) but not on the M5 critical path.
 
 ## 7. How to add a new variant
 
@@ -192,6 +192,16 @@ Resolved during M4:
 - [x] **M4 test surface.** GoogleTest only, same tradeoff as M2/M3. `test_flash_fwd_v1` covers the MILESTONES §M4 grid + edge cases (including an M4-specific `N = 257` case that exercises partial Q-tile *and* KV-tile tails). Python parity waits for M5 harness / pybind11.
 - [x] **`v2 backlog` file.** M4's TODO 5 asks for a note on inefficiencies deferred to v2. The document is [`flash_attention_notes.md`](flash_attention_notes.md); it also functions as M6's TODO list.
 
+Resolved during M5:
+
+- [x] **Build backend.** `scikit-build-core` drives the existing `CMakeLists.txt` at wheel-build time (`pyproject.toml [build-system]`). Chosen over `torch.utils.cpp_extension` (JIT-compile) to keep CMake as the single source of truth and match the `flash-attn` build pattern; upholds the M1 ADR ("hand-written pybind11 shim, not JIT"). Editable installs work via `pip install -e .`; the `_C` target is gated on `BUILD_PY_EXT=ON` so `scripts/build.sh` (which builds `hello` + GoogleTest) is unaffected.
+- [x] **Pybind11 shim location.** `csrc/bindings.cpp` — single translation unit exposing all three CUDA kernels (`attention_naive_forward`, `attention_online_ref_forward`, `flash_fwd_v1_forward`) as `torch::Tensor`-taking functions via `<torch/extension.h>`. Matches `docs/AGENTS.md` §4 ("the pybind11 shim lives in `csrc/` beside the kernels it wraps").
+- [x] **Python package.** `flash_from_scratch/__init__.py` re-exports each kernel plus `torch_ref_forward` under a uniform `fn(Q, K, V, is_causal) -> O` signature, with tensor-contract validation up front. `HAS_CUDA_EXT` module flag lets Mac-local imports succeed even without the compiled `_C.so`.
+- [x] **Timing policy.** CUDA events + `torch.cuda.synchronize()`, 10 warm-up iterations, 20 timed iterations, report `median` and `p95`. Rows with `(p95 - median) / median > 0.25` are flagged as unstable. Locked-clock / MPS deferred to M9. See `theory/M5.md` §3.
+- [x] **CSV schema.** Frozen in `benchmarks/bench_attention.py::CSV_COLUMNS`. Every row carries `git_sha` and `gpu_name` so any performance claim is fully sourced. See `theory/M5.md` §4 for per-column derivations.
+- [x] **Variant registry.** `benchmarks/variants.py::VARIANTS()` — one entry per benchmarkable kernel; both `tests/test_all_variants.py` and `benchmarks/bench_attention.py` iterate over it. Adding Flash v2 in M6 is one entry.
+- [x] **M5 shape grid.** `B=H=1, N ∈ {128, 256, 512, 1024, 2048}, D ∈ {32, 64}, causal=False`. Batch/multi-head/causal expand in M7; fp16 in M8.
+
 ## 9. Numerical tolerance policy
 
 Set in M1, pinned in each milestone's verification:
@@ -201,6 +211,7 @@ Set in M1, pinned in each milestone's verification:
 | CPU ref vs PyTorch, fp32 | `1e-5` | — | `torch.nn.functional.scaled_dot_product_attention` |
 | CUDA kernels, fp32 | `5e-4` | — | CPU ref |
 | M3 online-softmax vs CPU ref, fp32 | `1e-5` | — | CPU ref — algebraic equivalence, not matmul-accumulation drift |
+| M5 variant matrix vs `torch_ref`, fp32 | per-variant `tolerance_abs` in `benchmarks/variants.py::VariantSpec` | — | `torch.nn.functional.scaled_dot_product_attention` |
 | CUDA kernels, fp16 in / fp32 accum | `5e-3` | `1e-2` | CPU ref (fp32) |
 
 ## 10. Anti-scope (short form — full version in [`MILESTONES.md`](MILESTONES.md))
