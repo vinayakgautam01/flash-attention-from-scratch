@@ -193,7 +193,7 @@ before ticking the milestone. These are what separate "I typed the kernel" from
 - [x] Plot HBM footprint vs `N` on log-log axes → `docs/plots/naive_memory.png` (via `benchmarks/plot_naive_memory.py`).
 - [x] Add a "memory-bound" note in `docs/memory_analysis.md` (rough version, finalized in M9).
 
-**Status.** Complete pending GPU-side test run. All artifacts land on Mac-local (Python CSV/plot + `theory/M2.md`); the GoogleTest binary (`test_attention_naive`) requires CUDA and will be exercised on the next Colab T4 bootstrap. `docs/AGENTS.md` §9 fp32 tolerance (5e-4) reused unchanged; no new global config.
+**Status.** Complete on `5c55da0` (2026-08-07). Colab T4 (nvcc 12.8, torch 2.11.0+cu128) `ctest` run passes 20/20 M2 cases (16 parametrized `M2Grid/*` + 4 `AttentionNaiveEdge/*`) with max abs err `≤ 5e-7` vs the CPU ref. `benchmarks/results/naive_memory.csv` + `docs/plots/naive_memory.png` remain the standalone artifact; the M5 harness sweep (`all.csv`) also carries naive rows at every `(N, D)` in the M5 grid for cross-comparison. `docs/AGENTS.md` §9 fp32 tolerance (5e-4) held.
 
 **Verification plan.**
 
@@ -235,7 +235,7 @@ before ticking the milestone. These are what separate "I typed the kernel" from
 - [x] Tiny toy Python script `docs/toy_online_softmax.py` — runs the recurrence in NumPy for a `N=8` example, prints every intermediate + a broken-α variant that diverges by 21% — the figure that lands in the writeup.
 - [ ] ~~`tests/test_online_softmax.py`~~ — deferred to M5's harness. Python parity waits for pybind11 in M4 (`docs/AGENTS.md` §8 ADR). M3 correctness is fully covered by the C++/GoogleTest above.
 
-**Status.** Complete pending GPU-side test run. All Mac-local artifacts landed (theory, writeup, toy script, kernel/test sources, CMake target); the `test_attention_online_ref` binary requires CUDA and will be exercised on the next Colab T4 bootstrap. `docs/AGENTS.md` §9 gains an M3-specific tolerance row (1e-5 abs, algebraic equivalence).
+**Status.** Complete on `5c55da0` (2026-08-07). Colab T4 `ctest` run passes 11/11 M3 cases (6 parametrized `M3Grid/*` at `N ∈ {128, 512, 2048}, D ∈ {32, 64}` + 5 `AttentionOnlineRefEdge/*`) with max abs err `≤ 3e-7` vs the CPU ref — well inside the 1e-5 algebraic-equivalence bound recorded in `docs/AGENTS.md` §9. The M5 pytest matrix additionally diffs `attention_online_ref` against `torch_ref` (looser 5e-4 threshold, since matmul order differs); those 10 cells also pass. Runtime behaviour matches theory: (2 + 2N)·T HBM traffic dominates → 44 ms at `N=2048, D=64` (see `benchmarks/results/all.csv`), which is *why* M4 tiles.
 
 **Verification plan.**
 
@@ -271,10 +271,10 @@ before ticking the milestone. These are what separate "I typed the kernel" from
 - [x] `csrc/flash_fwd_v1.cu` — start with fixed `B=1, H=1`, `D ∈ {32, 64}`, non-causal. Kernel handles any `(B, H)` in signature; tests pin to `(1, 1)` per anti-scope.
 - [x] Choose `Br`, `Bc` from shared-memory budget; document the calculation in a comment header. **Picked `Br = Bc = 32`** — fits 48 KB default T4 smem AND 1024 threads/CTA cap for `D ∈ {32, 64}`.
 - [x] Correctness test vs CPU ref for `N ∈ {128, 256, 512, 1024, 2048}`, `D ∈ {32, 64}`, tolerance `< 5e-4` fp32. Includes `N = 257` case (partial Q-tile *and* KV-tile tails) even though MILESTONES doesn't require it — otherwise M7 inherits an untested tail path.
-- [ ] First-pass benchmark vs `attention_naive`: runtime + HBM-bytes-transferred (via Nsight if easy, else analytically), logged to `benchmarks/results/v1_vs_naive.csv`. **Deferred to Colab T4 bootstrap run** (Mac-local can't exercise the kernel).
+- [x] First-pass benchmark vs `attention_naive`: runtime + HBM-bytes-transferred (analytical via `benchmarks/perf_model.py`; Nsight deferred to M9), delivered by the M5 harness in `benchmarks/results/all.csv` (superset of the originally-scoped `v1_vs_naive.csv` — same numbers plus `torch_ref` and `attention_online_ref` for the same grid).
 - [x] Note obvious inefficiencies you're leaving for v2 (bank conflicts? uncoalesced loads? low occupancy?) in `docs/flash_attention_notes.md`.
 
-**Status.** Complete pending GPU-side test run + benchmark. All Mac-local artifacts landed (`theory/M4.md`, `csrc/flash_fwd_v1.{cuh,cu}`, `tests/cpp/test_flash_fwd_v1.cu`, `docs/flash_attention_notes.md`, `CMakeLists.txt`). The `test_flash_fwd_v1` binary requires CUDA and will be exercised on the next Colab T4 bootstrap; the v1-vs-naive benchmark row is the remaining M4 TODO before ticking the ledger.
+**Status.** Complete on `5c55da0` (2026-08-07). Colab T4 `ctest` run passes 16/16 M4 cases (10 parametrized `M4Grid/*` at `N ∈ {128, 256, 512, 1024, 2048}, D ∈ {32, 64}` + 6 `FlashFwdV1Edge/*` including the `N=257` mixed-tail case) with max abs err `≤ 6.6e-7` vs the CPU ref. First-pass benchmark row now lives in `benchmarks/results/all.csv`: Flash v1 beats `attention_naive` by 3.1× at `N=128, D=64` and stays ahead through `N=512, D=64` (1.5×), then loses to naive at `N ≥ 1024` for `D=64` — the exact memory-layout / occupancy story documented in `docs/flash_attention_notes.md` and reserved for M6. `S` and `P` never appear in `torch.cuda.memory_stats()` (peak_alloc = 0 delta for Flash v1 rows), as required.
 
 **Verification plan.**
 
@@ -306,16 +306,18 @@ before ticking the milestone. These are what separate "I typed the kernel" from
 
 **TODOs.**
 
-- [ ] `benchmarks/bench_attention.py` — sweeps `B, H, N, D, causal, dtype, variant`, writes one row per `(shape, variant)` to `benchmarks/results/all.csv` with columns:
+- [x] `benchmarks/bench_attention.py` — sweeps `B, H, N, D, causal, dtype, variant`, writes one row per `(shape, variant)` to `benchmarks/results/all.csv` with columns:
   ```text
   variant, B, H, N, D, causal, dtype, runtime_ms_median, runtime_ms_p95,
   hbm_bytes_est, peak_alloc_bytes, tflops_effective,
   max_abs_err_vs_ref, max_rel_err_vs_ref, git_sha, gpu_name
   ```
-- [ ] Uses CUDA events for timing, `torch.cuda.synchronize`, warm-up + N=20 timed iterations, records median and p95.
-- [ ] `tests/test_all_variants.py` — parametrizes over `(variant, shape)`, runs correctness for every registered variant.
-- [ ] Plot script `benchmarks/plot.py`: runtime vs `N` per variant, speedup vs naive vs `N`, error histogram. Outputs to `docs/plots/`.
-- [ ] Register `attention_naive` and `flash_fwd_v1` in the harness.
+- [x] Uses CUDA events for timing, `torch.cuda.synchronize`, warm-up + N=20 timed iterations, records median and p95.
+- [x] `tests/test_all_variants.py` — parametrizes over `(variant, shape)`, runs correctness for every registered variant.
+- [x] Plot script `benchmarks/plot.py`: runtime vs `N` per variant, speedup vs naive vs `N`, error histogram. Outputs to `docs/plots/`.
+- [x] Register `attention_naive` and `flash_fwd_v1` in the harness.
+
+**Status.** Complete on `5c55da0` (2026-08-07). Colab T4 sweep produced `benchmarks/results/all.csv` (40 rows × 16 columns — 4 variants × 5 `N` × 2 `D` × causal=False) plus three hero plots in `docs/plots/`. All 40 M5 parametrized pytest cases + 2 sanity cases pass; max abs err `≤ 6.6e-7` vs `torch_ref` across every non-reference row, well under the 5e-4 fp32-CUDA parity threshold. Measurement policy locked at `warmup=10, timed=20` CUDA-event iterations, median + p95 reported. Adding a new variant is now a three-line change (bindings shim + `variants.py` registry entry + CMake link target) — the harness is the compounding artifact for M6..M13.
 
 **Verification plan.**
 
@@ -570,10 +572,10 @@ before ticking the milestone. These are what separate "I typed the kernel" from
 | --- | ------------------------------------------ | ------ | ------ |
 | M0  | Repo scaffolding & source-of-truth setup   | S      | [x]    |
 | M1  | CPU reference + PyTorch oracle             | S      | [x]    |
-| M2  | Naive CUDA multi-kernel baseline           | M      | [~]    |
-| M3  | Online softmax reference                   | M      | [~]    |
-| M4  | FlashAttention v1 forward kernel           | L      | [~]    |
-| M5  | Test & benchmark harness (formalize)       | M      | [ ]    |
+| M2  | Naive CUDA multi-kernel baseline           | M      | [x]    |
+| M3  | Online softmax reference                   | M      | [x]    |
+| M4  | FlashAttention v1 forward kernel           | L      | [x]    |
+| M5  | Test & benchmark harness (formalize)       | M      | [x]    |
 | M6  | FlashAttention v2 layout & occupancy       | L      | [ ]    |
 | M7  | Batch, multi-head, causal, boundaries      | L      | [ ]    |
 | M8  | Mixed precision (fp16 in / fp32 accum)     | M      | [ ]    |
