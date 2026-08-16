@@ -349,19 +349,20 @@ before ticking the milestone. These are what separate "I typed the kernel" from
 
 **TODOs.**
 
-- [ ] `csrc/flash_fwd_v2_shared_kv.cu`.
-- [ ] Vectorized loads (`float4` or `__ldg` where appropriate) for Q/K/V.
-- [ ] Shared-memory layout revision (padded / swizzled) — document the conflict math in comments.
-- [ ] Review register usage (`--ptxas-options=-v`), tune `Br/Bc` for occupancy.
-- [ ] **Artifact:** `docs/ptxas_v1_vs_v2.md` — checked-in `ptxas -v` output for both kernels side-by-side (registers/thread, shared-mem/CTA, stack, spill loads/stores), with a two-paragraph interpretation.
-- [ ] Correctness passes on the same grid as v1.
-- [ ] Runs faster than v1 on at least `N ≥ 512, D=64`; log the improvement in `docs/flash_attention_notes.md`.
-- [ ] Naming/registration in the harness so v1 and v2 appear side-by-side in plots.
+- [x] `csrc/flash_fwd_v2_shared_kv.cu` (+ `.cuh`). Theory in [`../theory/M6.md`](../theory/M6.md).
+- [x] Vectorized loads (`float4`) for Q/K/V, via a linearized loop that also closes the hidden `Br == Bc` coupling (`flash_attention_notes.md` §11).
+- [x] Shared-memory layout revision — `sK` padded to `[Bc][D+1]`; the `gcd(stride, 32)` math is derived in `theory/M6.md` §4–§5 and summarized at the access site in the kernel.
+- [x] Review register usage (`--ptxas-options=-v`) — enabled on the v2 target; `__launch_bounds__(512, 2)` states the occupancy intent explicitly.
+- [x] Tune `Br/Bc` for occupancy — 512-thread CTAs (2 Q rows/thread) + a 12 KB smem reduction reach **2 CTAs/SM**. `Br` deliberately held at 32; the `Br = 64` fork and why it loses on T4 are in `theory/M6.md` §10.
+- [x] **Artifact:** `docs/ptxas_v1_vs_v2.md` — structure, reproduction commands, derived smem/occupancy table, and pre-registered predictions are in. *Register/spill columns pending a GPU run.*
+- [x] Correctness suite on the same grid as v1 — `tests/cpp/test_flash_fwd_v2.cu` (M4 grid + v1-parity suite + M4 edge cases + `N=17` row-split, causal smoke, launch-config guard). *Pending execution on a GPU host.*
+- [x] Naming/registration in the harness so v1 and v2 appear side-by-side in plots — `bindings.cu`, `flash_from_scratch/__init__.py`, `benchmarks/variants.py`, `perf_model.py`, `plot.py` (`VARIANT_ORDER`), `tests/test_all_variants.py`.
+- [ ] **Runs faster than v1 on at least `N ≥ 512, D=64`; log the improvement in `docs/flash_attention_notes.md`.** ← the one remaining gate; requires a GPU host. Predictions are recorded in `theory/M6.md` §13 *before* measuring.
 
 **Verification plan.**
 
-- Correctness parity with v1.
-- Nsight Compute shows: fewer bank conflicts, higher achieved occupancy, or higher DRAM throughput than v1 — pick which and prove it.
+- Correctness parity with v1. *(Suite written: a dedicated `FlashFwdV2Parity` case diffs v2 against v1 directly at 1e-5, tighter than the 5e-4 CPU-ref bound, plus a Python-side mirror in `tests/test_all_variants.py`.)*
+- Nsight Compute shows: fewer bank conflicts, higher achieved occupancy, or higher DRAM throughput than v1 — pick which and prove it. **Picked: fewer bank conflicts** (`l1tex__data_bank_conflicts_pipe_lsu_mem_shared`, predicted ~8.4× drop). Explicitly *not* achieved occupancy — it reads 100% for both v1 and v2, for the reason derived in `theory/M6.md` §7.2, and any claim resting on it would be resting on the wrong number.
 - `docs/ptxas_v1_vs_v2.md` exists and its numbers are consistent with your occupancy claim (fewer registers → higher theoretical occupancy, no spills, etc.).
 - New plot row in `docs/plots/runtime_vs_N.png` showing v2 above v1.
 

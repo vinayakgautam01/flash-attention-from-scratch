@@ -17,7 +17,7 @@ Work in progress. Roadmap: [`docs/MILESTONES.md`](docs/MILESTONES.md).
 | Naive CUDA | Materializes `S` and `P` | Baseline memory cost | pending (M2) |
 | Online softmax | Streaming softmax reference | Numerical stability | pending (M3) |
 | Flash v1 | Tiled K/V, no `N×N` write | IO-aware attention | pending (M4) |
-| Flash v2 | Better shared-mem layout, vectorized loads | Coalescing / occupancy | pending (M6) |
+| Flash v2 | Padded `sK` (bank-conflict-free), register-resident `Õ`/`P`, 512-thread CTAs, `float4` loads | Shared-memory banking / occupancy | kernel + tests landed (M6); speedup pending GPU run |
 | Flash causal + batch | Causal mask, batching, multi-head, boundary handling | LLM-shaped inputs | pending (M7) |
 | Flash fp16 | fp16 input, fp32 accumulation | Mixed precision | pending (M8) |
 
