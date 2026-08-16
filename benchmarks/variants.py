@@ -62,6 +62,7 @@ def _lazy_variants() -> dict[str, VariantSpec]:
         attention_naive_forward,
         attention_online_ref_forward,
         flash_fwd_v1_forward,
+        flash_fwd_v2_forward,
         torch_ref_forward,
     )
 
@@ -107,6 +108,20 @@ def _lazy_variants() -> dict[str, VariantSpec]:
             supports_causal=False,
             supported_D=frozenset({32, 64}),
             supported_dtypes=frozenset({"fp32"}),
+            tolerance_abs=5e-4,
+        ),
+        "flash_fwd_v2": VariantSpec(
+            fn=flash_fwd_v2_forward,
+            is_reference=False,
+            # Same convention as v1: the kernel implements causal and a smoke
+            # test covers it in the GoogleTest, but the benchmark/pytest grid
+            # stays non-causal until M7 formalizes the causal axis.
+            supports_causal=False,
+            supported_D=frozenset({32, 64}),
+            supported_dtypes=frozenset({"fp32"}),
+            # Identical algebra to v1, so identical tolerance. M6 changes only
+            # operand placement; if this ever needs loosening, the change was
+            # not the mechanical one it claims to be.
             tolerance_abs=5e-4,
         ),
     }

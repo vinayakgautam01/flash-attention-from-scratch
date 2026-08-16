@@ -32,9 +32,13 @@ __all__ = [
     "attention_naive_forward",
     "attention_online_ref_forward",
     "flash_fwd_v1_forward",
+    "flash_fwd_v2_forward",
     "torch_ref_forward",
     "kFlashV1Br",
     "kFlashV1Bc",
+    "kFlashV2Br",
+    "kFlashV2Bc",
+    "kFlashV2RowsPerThread",
     "kOnlineRefBc",
 ]
 
@@ -48,6 +52,9 @@ try:
     HAS_CUDA_EXT: bool = True
     kFlashV1Br: int = _C.kFlashV1Br
     kFlashV1Bc: int = _C.kFlashV1Bc
+    kFlashV2Br: int = _C.kFlashV2Br
+    kFlashV2Bc: int = _C.kFlashV2Bc
+    kFlashV2RowsPerThread: int = _C.kFlashV2RowsPerThread
     kOnlineRefBc: int = _C.kOnlineRefBc
 except ImportError as _e:
     _import_error = _e
@@ -56,6 +63,9 @@ except ImportError as _e:
     # the extension is missing. Values mirror the .cuh headers verbatim.
     kFlashV1Br = 32
     kFlashV1Bc = 32
+    kFlashV2Br = 32
+    kFlashV2Bc = 32
+    kFlashV2RowsPerThread = 2
     kOnlineRefBc = 64
 
 
@@ -126,6 +136,18 @@ def flash_fwd_v1_forward(Q: torch.Tensor, K: torch.Tensor,
     _check_qkv(Q, K, V, "flash_fwd_v1_forward", frozenset({32, 64}))
     _require_ext()
     return _C.flash_fwd_v1_forward(Q, K, V, is_causal)
+
+
+def flash_fwd_v2_forward(Q: torch.Tensor, K: torch.Tensor,
+                         V: torch.Tensor, is_causal: bool = False) -> torch.Tensor:
+    """M6 Flash v2 tiled forward. See ``csrc/flash_fwd_v2_shared_kv.cuh``.
+
+    Same algebra as :func:`flash_fwd_v1_forward`; differs only in memory
+    layout, thread mapping, and load width. Outputs agree with v1 to ~1e-5.
+    """
+    _check_qkv(Q, K, V, "flash_fwd_v2_forward", frozenset({32, 64}))
+    _require_ext()
+    return _C.flash_fwd_v2_forward(Q, K, V, is_causal)
 
 
 def torch_ref_forward(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor,

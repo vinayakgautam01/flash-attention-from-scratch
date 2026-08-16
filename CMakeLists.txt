@@ -105,6 +105,23 @@ if(HAVE_CUDA)
     target_compile_options(flash_fwd_v1 PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>
     )
+
+    # M6: "Flash v2" — same algebra as v1, retuned for the memory hierarchy
+    # (padded sK, register-resident Õ, 512-thread CTAs, float4 loads). Same
+    # target shape as flash_fwd_v1. The `--ptxas-options=-v` flag below is not
+    # incidental here: its output is a checked-in M6 deliverable
+    # (docs/ptxas_v1_vs_v2.md), so keep it on.
+    add_library(flash_fwd_v2 STATIC csrc/flash_fwd_v2_shared_kv.cu)
+    target_include_directories(flash_fwd_v2 PUBLIC ${CMAKE_SOURCE_DIR}/csrc)
+    target_link_libraries(flash_fwd_v2 PUBLIC attention_cpu_ref)
+    set_target_properties(flash_fwd_v2 PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+    )
+    target_compile_features(flash_fwd_v2 PUBLIC cxx_std_17 cuda_std_17)
+    target_compile_options(flash_fwd_v2 PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>
+    )
 endif()
 
 # M1: GoogleTest for pure-C++ host-side unit tests. Decision recorded in
@@ -181,6 +198,24 @@ if(BUILD_TESTING)
         )
         target_compile_features(test_flash_fwd_v1 PRIVATE cxx_std_17 cuda_std_17)
         gtest_discover_tests(test_flash_fwd_v1)
+
+        # M6: Flash v2 correctness. Links BOTH kernels because the suite
+        # includes a direct v1-vs-v2 parity check (MILESTONES §M6: "correctness
+        # parity with v1"), not just a diff against the CPU reference.
+        add_executable(test_flash_fwd_v2
+            tests/cpp/test_flash_fwd_v2.cu
+        )
+        target_link_libraries(test_flash_fwd_v2 PRIVATE
+            flash_fwd_v2
+            flash_fwd_v1
+            attention_cpu_ref
+            GTest::gtest_main
+        )
+        set_target_properties(test_flash_fwd_v2 PROPERTIES
+            CUDA_SEPARABLE_COMPILATION ON
+        )
+        target_compile_features(test_flash_fwd_v2 PRIVATE cxx_std_17 cuda_std_17)
+        gtest_discover_tests(test_flash_fwd_v2)
     endif()
 endif()
 
@@ -257,6 +292,7 @@ if(BUILD_PY_EXT)
         attention_naive
         attention_online_ref
         flash_fwd_v1
+        flash_fwd_v2
         ${TORCH_LIBRARIES}
         ${TORCH_PYTHON_LIBRARY}
     )

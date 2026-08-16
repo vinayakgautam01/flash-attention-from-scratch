@@ -74,6 +74,7 @@ def _variant_names_lazy() -> list[str]:
             "attention_naive",
             "attention_online_ref",
             "flash_fwd_v1",
+            "flash_fwd_v2",
         ]
 
 
@@ -99,6 +100,37 @@ def test_variant_matches_reference(variant: str, B: int, H: int, N: int, D: int,
     assert abs_err <= spec.tolerance_abs, (
         f"{variant} @ B={B} H={H} N={N} D={D} causal={causal}: "
         f"max abs err {abs_err:.3e} > tol {spec.tolerance_abs:.3e}"
+    )
+
+
+@pytest.mark.parametrize("N,D", [(128, 32), (512, 64), (2048, 64)])
+def test_flash_v2_matches_v1(N: int, D: int) -> None:
+    """M6 entry condition: v2 is a drop-in replacement for v1.
+
+    MILESTONES §M6 asks for "correctness parity with v1". The C++ suite
+    (``tests/cpp/test_flash_fwd_v2.cu``) owns the authoritative check against
+    the CPU reference; this is the Python-side mirror so a parity break shows
+    up in ``scripts/test.sh`` too.
+
+    Bound is 1e-5, tighter than the 5e-4 oracle tolerance: both kernels
+    accumulate in the same order, so they should differ only by FMA-contraction
+    round-off, not by algebra.
+    """
+    VARIANTS, _, supports = _require_cuda_ext()
+    if not (supports("flash_fwd_v1", D, False, "fp32")
+            and supports("flash_fwd_v2", D, False, "fp32")):
+        pytest.skip(f"v1/v2 do not both support D={D}")
+
+    from tests.util_tensors import make_qkv
+    Q, K, V = make_qkv(1, 1, N, D, device="cuda", seed=0)
+
+    out_v1 = VARIANTS["flash_fwd_v1"].fn(Q, K, V, False)
+    out_v2 = VARIANTS["flash_fwd_v2"].fn(Q, K, V, False)
+
+    abs_err = (out_v2.float() - out_v1.float()).abs().max().item()
+    assert abs_err <= 1e-5, (
+        f"flash_fwd_v2 diverged from flash_fwd_v1 @ N={N} D={D}: "
+        f"max abs err {abs_err:.3e}"
     )
 
 
@@ -145,8 +177,14 @@ def test_perf_model_hbm_estimates_are_positive() -> None:
             > hbm_bytes_naive(B, H, N, D))
 
     for variant in ("attention_naive", "attention_online_ref",
-                    "flash_fwd_v1", "torch_ref"):
+                    "flash_fwd_v1", "flash_fwd_v2", "torch_ref"):
         assert hbm_bytes_est(variant, B, H, N, D) > 0
+
+    # M6 kept Br=32 and the FA-1 loop order, so v2's analytical traffic is
+    # identical to v1's by construction (theory/M6.md §10). If this ever
+    # diverges, the "mechanical changes only" claim needs revisiting.
+    assert (hbm_bytes_est("flash_fwd_v2", B, H, N, D)
+            == hbm_bytes_est("flash_fwd_v1", B, H, N, D))
 
     assert tflops_effective(B, H, N, D, runtime_ms=1.0) > 0.0
     assert tflops_effective(B, H, N, D, runtime_ms=0.0) == 0.0

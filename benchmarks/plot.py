@@ -28,11 +28,14 @@ DEFAULT_CSV = REPO_ROOT / "benchmarks" / "results" / "all.csv"
 PLOT_DIR = REPO_ROOT / "docs" / "plots"
 
 # Fixed rendering order so plots are stable across runs (reference first).
+# v1 and v2 are adjacent on purpose: MILESTONES §M6 asks for the two Flash
+# variants to read side-by-side in the legend.
 VARIANT_ORDER = [
     "torch_ref",
     "attention_naive",
     "attention_online_ref",
     "flash_fwd_v1",
+    "flash_fwd_v2",
 ]
 
 

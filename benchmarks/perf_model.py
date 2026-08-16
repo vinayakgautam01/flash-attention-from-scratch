@@ -10,7 +10,9 @@ Every formula here is derived in ``theory/M5.md`` §4:
 * :func:`hbm_bytes_naive` — three-kernel materialize-S-and-P baseline (§4.1).
 * :func:`hbm_bytes_online_ref` — one-CTA-per-row streaming (K/V re-loaded per
   row) (§4.1).
-* :func:`hbm_bytes_flash_v1` — one-CTA-per-Q-tile tiled kernel (§4.1).
+* :func:`hbm_bytes_flash_tiled` — one-CTA-per-Q-tile tiled kernel, shared by
+  Flash v1 (M4) and Flash v2 (M6) since both use the FA-1 loop order and
+  ``Br = 32`` (§4.1). Aliased as ``hbm_bytes_flash_v1`` for back-compat.
 * :func:`hbm_bytes_est` — the dispatcher a benchmark row calls, so adding a
   new variant is one branch here.
 
@@ -107,9 +109,10 @@ def hbm_bytes_online_ref(B: int, H: int, N: int, D: int,
     return (2 + 2 * N) * T
 
 
-def hbm_bytes_flash_v1(B: int, H: int, N: int, D: int,
-                       Br: int, dtype_bytes: int = FP32_BYTES) -> int:
-    """M4 Flash v1: one CTA per Q-tile of Br rows.
+def hbm_bytes_flash_tiled(B: int, H: int, N: int, D: int,
+                          Br: int, dtype_bytes: int = FP32_BYTES) -> int:
+    """One CTA per Q-tile of ``Br`` rows — the FA-1 loop order used by both
+    Flash v1 (M4) and Flash v2 (M6).
 
     Q is loaded once (each Q-tile by its owning CTA). K/V are re-loaded once
     per Q-tile — i.e. ``ceil(N / Br)`` full copies of each.
@@ -121,10 +124,22 @@ def hbm_bytes_flash_v1(B: int, H: int, N: int, D: int,
 
     Total: ``(2 + 2 * ceil(N / Br)) * T``. See ``theory/M5.md`` §4.1 and
     ``theory/M4.md`` §10 for the K/V re-load argument.
+
+    Shared by v1 and v2 because M6 deliberately kept ``Br = 32`` and the FA-1
+    loop order — its changes are mechanical (layout, occupancy, load width), so
+    the analytical HBM traffic is *identical* to v1's by construction. Any
+    measured DRAM-throughput delta between the two is therefore attributable to
+    efficiency, not to a different traffic budget. See ``theory/M6.md`` §10 for
+    the ``Br = 64`` option that would have changed this, and why it was not
+    taken on T4.
     """
     T = _T_bytes(B, H, N, D, dtype_bytes)
     tiles = (N + Br - 1) // Br
     return (2 + 2 * tiles) * T
+
+
+# Back-compat alias: `hbm_bytes_flash_v1` was the M4/M5-era name.
+hbm_bytes_flash_v1 = hbm_bytes_flash_tiled
 
 
 # --------------------------------------------------------------------------- #
@@ -137,6 +152,11 @@ try:
     from flash_from_scratch import kFlashV1Br as _FLASH_V1_BR  # type: ignore[no-redef]
 except ImportError:
     _FLASH_V1_BR = 32
+
+try:
+    from flash_from_scratch import kFlashV2Br as _FLASH_V2_BR  # type: ignore[no-redef]
+except ImportError:
+    _FLASH_V2_BR = 32
 
 
 def hbm_bytes_est(variant: str, B: int, H: int, N: int, D: int,
@@ -153,8 +173,10 @@ def hbm_bytes_est(variant: str, B: int, H: int, N: int, D: int,
         return hbm_bytes_naive(B, H, N, D, dtype_bytes)
     if variant == "attention_online_ref":
         return hbm_bytes_online_ref(B, H, N, D, dtype_bytes)
+    if variant == "flash_fwd_v2":
+        return hbm_bytes_flash_tiled(B, H, N, D, _FLASH_V2_BR, dtype_bytes)
     if variant in ("flash_fwd_v1", "torch_ref"):
-        return hbm_bytes_flash_v1(B, H, N, D, _FLASH_V1_BR, dtype_bytes)
+        return hbm_bytes_flash_tiled(B, H, N, D, _FLASH_V1_BR, dtype_bytes)
     raise KeyError(f"unknown variant for HBM estimate: {variant!r}")
 
 

@@ -29,6 +29,7 @@
 #include "attention_naive.cuh"
 #include "attention_online_ref.cuh"
 #include "flash_fwd_v1.cuh"
+#include "flash_fwd_v2_shared_kv.cuh"
 
 namespace flash_from_scratch {
 
@@ -107,6 +108,19 @@ torch::Tensor flash_fwd_v1_forward_py(torch::Tensor Q, torch::Tensor K,
     return O;
 }
 
+torch::Tensor flash_fwd_v2_forward_py(torch::Tensor Q, torch::Tensor K,
+                                      torch::Tensor V, bool is_causal) {
+    check_qkv_contract(Q, K, V, "flash_fwd_v2_forward");
+    const auto d = dims_from(Q);
+    TORCH_CHECK(d.D == 32 || d.D == 64,
+                "flash_fwd_v2_forward: D must be 32 or 64 in v2 (got ", d.D, ")");
+    auto O = torch::empty_like(Q);
+    flash_fwd_v2_forward(Q.data_ptr<float>(), K.data_ptr<float>(),
+                         V.data_ptr<float>(), O.data_ptr<float>(),
+                         d.B, d.H, d.N, d.D, is_causal, /*stream=*/0);
+    return O;
+}
+
 }  // namespace
 
 }  // namespace flash_from_scratch
@@ -132,7 +146,17 @@ PYBIND11_MODULE(_C, m) {
           pybind11::arg("Q"), pybind11::arg("K"), pybind11::arg("V"),
           pybind11::arg("is_causal") = false);
 
+    m.def("flash_fwd_v2_forward",
+          &flash_from_scratch::flash_fwd_v2_forward_py,
+          "M6 Flash v2 tiled forward (same algebra as v1; padded sK, "
+          "register-resident O-accumulator, 512-thread CTAs, float4 loads).",
+          pybind11::arg("Q"), pybind11::arg("K"), pybind11::arg("V"),
+          pybind11::arg("is_causal") = false);
+
     m.attr("kFlashV1Br") = flash_from_scratch::kFlashV1Br;
     m.attr("kFlashV1Bc") = flash_from_scratch::kFlashV1Bc;
+    m.attr("kFlashV2Br") = flash_from_scratch::kFlashV2Br;
+    m.attr("kFlashV2Bc") = flash_from_scratch::kFlashV2Bc;
+    m.attr("kFlashV2RowsPerThread") = flash_from_scratch::kFlashV2RowsPerThread;
     m.attr("kOnlineRefBc") = flash_from_scratch::kOnlineRefBc;
 }
