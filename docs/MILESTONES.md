@@ -357,14 +357,18 @@ before ticking the milestone. These are what separate "I typed the kernel" from
 - [x] **Artifact:** `docs/ptxas_v1_vs_v2.md` — structure, reproduction commands, derived smem/occupancy table, and pre-registered predictions are in. *Register/spill columns pending a GPU run.*
 - [x] Correctness suite on the same grid as v1 — `tests/cpp/test_flash_fwd_v2.cu` (M4 grid + v1-parity suite + M4 edge cases + `N=17` row-split, causal smoke, launch-config guard). *Pending execution on a GPU host.*
 - [x] Naming/registration in the harness so v1 and v2 appear side-by-side in plots — `bindings.cu`, `flash_from_scratch/__init__.py`, `benchmarks/variants.py`, `perf_model.py`, `plot.py` (`VARIANT_ORDER`), `tests/test_all_variants.py`.
-- [ ] **Runs faster than v1 on at least `N ≥ 512, D=64`; log the improvement in `docs/flash_attention_notes.md`.** ← the one remaining gate; requires a GPU host. Predictions are recorded in `theory/M6.md` §13 *before* measuring.
+- [x] **Runs faster than v1 on at least `N ≥ 512, D=64`; log the improvement in `docs/flash_attention_notes.md`.** Passed at **6.27× / 11.76× / 13.22×** for `N = 512 / 1024 / 2048` at `D = 64`. Logged in `docs/flash_attention_notes.md` (top callout) and `theory/M6.md` §13.1, which also scores the pre-registered 4–7× prediction and explains why it came in low.
+
+**Status.** *Substantially complete* on `5d07586` (2026-08-16), Colab Tesla T4 / nvcc 12.8. All 10 TODOs done; the milestone stays `[~]` only because one verification bullet needs Nsight Compute (see below). **Headline: 13.22× over v1 at `N = 2048, D = 64` (11.69 ms → 0.88 ms)**, with the full grid ranging 3.41×–13.22× and widening with `N`. The bar that actually mattered — the one `theory/M6.md` §13 named above the MILESTONES bar — is beating `attention_naive` at `N = 2048, D = 64`: v1 *lost* there (6.66 ms vs 11.69 ms, 0.57×), v2 wins by **7.5×**. The gap to `torch_ref` (cuBLAS SDPA, 0.426 ms) narrows from ~27× to ~2.1×, i.e. 3.7% → **48%** of torch's effective throughput. Correctness: `test_flash_fwd_v2` passes 25/25 (1 config guard + 8 edge + 10 `M6Grid` + 6 `M6Parity`), full `ctest` 79/79, pytest 74/74; `max_abs_err_vs_ref` is *identical* to v1's in all ten benchmark rows, which is the empirical form of the bit-parity claim. `ptxas`: **zero spills in either kernel** (v1 63 registers, v2 64 at both `D`), and warps/SM is 32 for both — so the reported "occupancy" is unchanged across a 13× speedup, exactly as `theory/M6.md` §7.2 predicted. Details in `docs/ptxas_v1_vs_v2.md` §3 and `theory/M6.md` §13.1, the latter also scoring the pre-registered 4–7× prediction (too conservative) and explaining why.
+
+**Outstanding for `[~]` → `[x]`:** (1) the Nsight bank-conflict metric below — needs `ncu`, lands with M9; (2) `benchmarks/results/all.csv` and refreshed `docs/plots/*.png` regenerated with the v2 rows and committed.
 
 **Verification plan.**
 
-- Correctness parity with v1. *(Suite written: a dedicated `FlashFwdV2Parity` case diffs v2 against v1 directly at 1e-5, tighter than the 5e-4 CPU-ref bound, plus a Python-side mirror in `tests/test_all_variants.py`.)*
-- Nsight Compute shows: fewer bank conflicts, higher achieved occupancy, or higher DRAM throughput than v1 — pick which and prove it. **Picked: fewer bank conflicts** (`l1tex__data_bank_conflicts_pipe_lsu_mem_shared`, predicted ~8.4× drop). Explicitly *not* achieved occupancy — it reads 100% for both v1 and v2, for the reason derived in `theory/M6.md` §7.2, and any claim resting on it would be resting on the wrong number.
-- `docs/ptxas_v1_vs_v2.md` exists and its numbers are consistent with your occupancy claim (fewer registers → higher theoretical occupancy, no spills, etc.).
-- New plot row in `docs/plots/runtime_vs_N.png` showing v2 above v1.
+- Correctness parity with v1. **✓ Passed** — `M6Parity` diffs v2 against v1 directly at 1e-5 (tighter than the 5e-4 CPU-ref bound) across 6 shapes, plus a Python mirror in `tests/test_all_variants.py`. Benchmark rows corroborate: identical `max_abs_err_vs_ref` for v1 and v2 at every shape.
+- Nsight Compute shows: fewer bank conflicts, higher achieved occupancy, or higher DRAM throughput than v1 — pick which and prove it. **Picked: fewer bank conflicts** (`l1tex__data_bank_conflicts_pipe_lsu_mem_shared`, predicted ~8.4× drop). Explicitly *not* achieved occupancy — it reads 100% for both v1 and v2, for the reason derived in `theory/M6.md` §7.2, and any claim resting on it would be resting on the wrong number. **⏳ Pending M9** (needs `ncu`). The prediction that occupancy would *not* move is already confirmed independently: `ptxas` gives 32 warps/SM for both kernels.
+- `docs/ptxas_v1_vs_v2.md` exists and its numbers are consistent with your occupancy claim (fewer registers → higher theoretical occupancy, no spills, etc.). **✓ Passed, with the parenthetical corrected.** No spills in either kernel, as required. But "fewer registers" is *not* what happened: v2 uses **more** registers per thread (64 vs 63) and fewer per *CTA* (32,768 vs 64,512). The occupancy claim rests on CTA-level residency — v2 reaches 2 CTAs/SM on the thread, register and shared-memory limits simultaneously — not on per-thread register count, which moved the wrong way. See `docs/ptxas_v1_vs_v2.md` §2.2, §3.
+- New plot row in `docs/plots/runtime_vs_N.png` showing v2 above v1. **⏳ Pending** — plots regenerate from `scripts/bench.sh`; the refreshed PNGs and `all.csv` still need committing.
 
 **Understanding checkpoint.**
 
@@ -577,7 +581,7 @@ before ticking the milestone. These are what separate "I typed the kernel" from
 | M3  | Online softmax reference                   | M      | [x]    |
 | M4  | FlashAttention v1 forward kernel           | L      | [x]    |
 | M5  | Test & benchmark harness (formalize)       | M      | [x]    |
-| M6  | FlashAttention v2 layout & occupancy       | L      | [ ]    |
+| M6  | FlashAttention v2 layout & occupancy       | L      | [~]    |
 | M7  | Batch, multi-head, causal, boundaries      | L      | [ ]    |
 | M8  | Mixed precision (fp16 in / fp32 accum)     | M      | [ ]    |
 | M9  | Nsight deep dive & three writeups          | M      | [ ]    |
