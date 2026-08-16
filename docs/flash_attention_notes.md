@@ -10,8 +10,8 @@ Everything below is measured against `csrc/flash_fwd_v1.cu` at the M4 landing co
 >
 > Two consequences worth stating plainly, because they change the repo's headline claims:
 >
-> - **Flash now beats the naive kernel where it matters.** `attention_naive` is 6.66 ms at that shape. v1 *lost* to it (0.57×); v2 wins by **7.5×**. The project's central thesis — that IO-aware attention wins at large `N` — was not actually demonstrated by v1, and is now demonstrated by v2.
-> - **The gap to `torch_ref` (cuBLAS SDPA, 0.426 ms) closes from ~27× to ~2.1×**, i.e. from 3.7% to **48%** of torch's effective throughput.
+> - **Flash now beats the naive kernel everywhere, not just somewhere.** `attention_naive` is 6.71 ms at that shape; v1 *lost* to it (0.57×), v2 wins by **7.6×**. More important than the single point: v1 beat naive only at small `N` and fell behind from `N = 1024` (0.79× at `D=64`, 0.65× at `N=2048, D=32`), whereas **v2 wins at all ten shapes**, by 6.6×–21.9×. The project's central thesis — that IO-aware attention wins at large `N` — was not actually demonstrated by v1, and is now.
+> - **The gap to `torch_ref` (cuBLAS SDPA, 0.426 ms) closes from ~27× to ~2.1×**, i.e. from 3.6% to **48%** of torch's effective throughput.
 >
 > Full table and the analysis of why the pre-registered prediction (4–7×) came in low: [`../theory/M6.md`](../theory/M6.md) §13.1. Compiler-side evidence — **no register spills in either kernel**, and warps/SM identical at 32, so "occupancy" did not move at all: [`ptxas_v1_vs_v2.md`](ptxas_v1_vs_v2.md) §3.
 
@@ -145,8 +145,9 @@ At `D = 64, Br = 32`, **M4's asymptotic HBM ratio vs naive is 1× (parity)** —
 ## Change log
 
 - **M4 landing commit** — this file is created; sections 1–10 enumerated (§11 added shortly after).
-- **M6 landing commit** — sections **1, 2, 3, 4, 11 closed**; section 5 restated as M7-only (T4 is Turing); section 7's budget revised downward; section **12 opened** as the largest remaining lever.
-- **M6 measurement (Colab T4, `5d07586`)** — 13.2× at \(N = 2048, D = 64\); Flash overtakes `attention_naive` for the first time (7.5×). Recorded in the callout at the top of this file and in [`../theory/M6.md`](../theory/M6.md) §13.1. **One substantive correction:** §2's claim that `sV` suffered the same 32-way conflict as `sK` was wrong — `sV`'s lane-stride is 1. The full per-access audit that settles it is in [`../theory/M6.md`](../theory/M6.md) §5.1, and the error is dissected in §5.2 because the *reason* it was wrong (mistaking a loop counter for the lane index) is the single most common way to misread a shared-memory access pattern.
+- **M6 landing commit** — sections **1, 2, 3, 4, 11 closed**; section 5 restated as M7-only (T4 is Turing); section 7's budget revised downward; section **12 opened** as the largest remaining lever. **One substantive correction:** §2's claim that `sV` suffered the same 32-way conflict as `sK` was wrong — `sV`'s lane-stride is 1. The full per-access audit that settles it is in [`../theory/M6.md`](../theory/M6.md) §5.1, and the error is dissected in §5.2 because the *reason* it was wrong (mistaking a loop counter for the lane index) is the single most common way to misread a shared-memory access pattern.
+- **M6 measurement (Colab T4, `5d07586`)** — 13.2× over v1 at \(N = 2048, D = 64\); Flash overtakes `attention_naive` for the first time (7.6× there, and at *every* shape in the sweep). Recorded in the callout at the top of this file and in [`../theory/M6.md`](../theory/M6.md) §13.1.
+- **M6 benchmark artifacts** — `benchmarks/results/all.csv` refreshed to the 50-row, five-variant sweep at `5d07586`; `docs/plots/*.png` regenerated with the v2 series.
 - **M7 landing commit** — sections 5, 7, 8, 9 to be marked *closed*.
 - **M9 landing commit** — Nsight metrics backfilled into §2 and §4 (`l1tex__data_bank_conflicts_pipe_lsu_mem_shared`, stall-reason breakdown).
 - **M10 landing commit** — section 6 explicitly *not closed*; framed as "reading the gap."
